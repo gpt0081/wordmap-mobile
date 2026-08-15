@@ -25,6 +25,20 @@ window.askQ = async function(){
         +'</div>';
     }
 
+    let generated=(d.generated_sentences||[]);
+    let generatedHtml='';
+    if(generated.length){
+      generatedHtml='<div class="result"><div class="token">생성 문장 후보</div>'
+        +generated.map((x,i)=>{
+          let mode=x.mode==='semantic'?'의미관계 기반':'말뭉치 순서 기반';
+          let path=(x.path||[]).map(esc).join(' → ');
+          return '<div style="margin-top:13px"><b>'+(i+1)+'. '+esc(x.text)+'</b>'
+            +'<div class="meta" style="margin-top:4px">'+mode
+            +(path?' · 경로 '+path:'')+'</div></div>';
+        }).join('')
+        +'</div>';
+    }
+
     let next=(d.next_word_candidates||[]);
     let nextHtml='';
     if(next.length){
@@ -51,6 +65,7 @@ window.askQ = async function(){
       +'<br>시작 노드: '+d.seed_tokens.map(esc).join(', ')+'</div>'
       +(d.warning?'<div class="warn">'+esc(d.warning)+'</div>':'')
       +analysisHtml
+      +generatedHtml
       +nextHtml
       +semanticHtml
       +d.results.map((x,i)=>
