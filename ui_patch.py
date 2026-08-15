@@ -14,6 +14,28 @@ window.askQ = async function(){
       limit:20
     });
 
+    let analysis=(d.surface_analysis||[]);
+    let analysisHtml='';
+    let compounds=analysis.filter(x=>x.compound);
+    if(compounds.length){
+      analysisHtml='<div class="result"><div class="token">입력 분해</div>'
+        +compounds.map(x=>'<div class="meta" style="margin-top:7px">'
+          +esc(x.surface)+' → '+x.lemmas.map(esc).join(' + ')
+          +'</div>').join('')
+        +'</div>';
+    }
+
+    let next=(d.next_word_candidates||[]);
+    let nextHtml='';
+    if(next.length){
+      nextHtml='<div class="result"><div class="token">다음 단어 후보 · '
+        +esc(d.next_word_source||'')+'</div>'
+        +next.map((x,i)=>'<div style="margin-top:9px"><b>'+(i+1)+'. '
+          +esc(x.token)+'</b><div class="meta">출현 '+Number(x.count||0)
+          +'회 · '+(Number(x.probability||0)*100).toFixed(1)+'%</div></div>').join('')
+        +'</div>';
+    }
+
     let semantic=(d.semantic_paths||[]);
     let semanticHtml='';
     if(semantic.length){
@@ -28,6 +50,8 @@ window.askQ = async function(){
       '<div class="meta">질문 토큰: '+d.query_tokens.map(esc).join(', ')
       +'<br>시작 노드: '+d.seed_tokens.map(esc).join(', ')+'</div>'
       +(d.warning?'<div class="warn">'+esc(d.warning)+'</div>':'')
+      +analysisHtml
+      +nextHtml
       +semanticHtml
       +d.results.map((x,i)=>
         '<div class="result"><div class="token">'+(i+1)+'. '+esc(x.token)
