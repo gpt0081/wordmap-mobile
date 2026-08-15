@@ -3,10 +3,12 @@
 import core
 import cleaning
 import relations
+import hybrid
 
-# Order matters: normalize/prune first, then add semantic directionality.
+# Order matters: clean/prune -> semantic relations -> sparse hybrid links.
 cleaning.apply(core)
 relations.apply(core)
+hybrid.apply(core, relations)
 
 import wordmap_mobile
 import ui_patch
