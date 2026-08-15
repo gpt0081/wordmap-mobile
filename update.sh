@@ -42,12 +42,13 @@ git pull --ff-only
 if python -m py_compile \
   core.py cleaning.py grammar.py lexicon.py language.py \
   relations.py hybrid.py lexicon_notes.py ui_patch.py \
-  launch.py wordmap_mobile.py; then
+  selftest.py launch.py wordmap_mobile.py \
+  && python selftest.py; then
   NEW_VERSION="$(cat VERSION 2>/dev/null || echo unknown)"
   echo "[WordMap] 업데이트 완료: $OLD_VERSION -> $NEW_VERSION"
   echo "[WordMap] 서버가 실행 중이었다면 Ctrl+C 후 bash start.sh 로 다시 실행하세요."
 else
-  echo "[WordMap] 새 코드 문법 검사 실패. 이전 버전으로 되돌립니다."
+  echo "[WordMap] 새 버전 검사 실패. 이전 버전으로 되돌립니다."
   git reset --hard "$OLD_COMMIT"
   exit 1
 fi
