@@ -6,7 +6,7 @@ from pathlib import Path
 import grammar
 import lexicon as lexicon_mod
 
-VERSION = "0.5.0"
+VERSION = "0.5.1"
 
 _ACTIVE = {
     "version": VERSION,
@@ -14,6 +14,7 @@ _ACTIVE = {
     "surface_index": {},
     "stats": {},
 }
+_TOKEN_STOPWORDS = set()
 
 
 def _lexicon_path(core, vault):
@@ -38,7 +39,10 @@ def _load(core, vault):
 
 def _texts(core, vault):
     d = core.wordmap_dirs(vault)
-    files = sorted([*d["corpus"].glob("*.md"), *d["corpus"].glob("*.txt")])
+    files = sorted([
+        *d["corpus"].glob("*.md"),
+        *d["corpus"].glob("*.txt"),
+    ])
     return [(path, core.corpus_body(path)) for path in files]
 
 
@@ -46,8 +50,23 @@ def tokenize(text):
     out = []
     for surface in grammar.raw_words(text):
         entry = lexicon_mod.resolve(_ACTIVE, surface)
-        if entry and entry.get("lemma"):
-            out.append(entry["lemma"])
+        if not entry or not entry.get("lemma"):
+            continue
+
+        lemma = entry["lemma"]
+
+        # v0.5.0 accidentally bypassed the cleaner's stopword set after
+        # replacing core.tokenize. Restore the exact same language filter here.
+        if surface in _TOKEN_STOPWORDS or lemma in _TOKEN_STOPWORDS:
+            continue
+
+        # Unsupported one-syllable grammatical fragments must not become graph
+        # nodes. Corpus-supported nouns such as 황/돈 still survive.
+        if len(lemma) == 1 and entry.get("pos") not in {"noun", "proper"}:
+            continue
+
+        out.append(lemma)
+
     return out
 
 
@@ -83,7 +102,11 @@ def _annotate_graph(core, vault, data):
 
 def make_rebuild(core, original_rebuild):
     def rebuild(vault, window=4):
-        texts = [text for _path, text in _texts(core, vault) if text.strip()]
+        texts = [
+            text
+            for _path, text in _texts(core, vault)
+            if text.strip()
+        ]
         if not texts:
             raise ValueError("내용이 있는 Corpus 말뭉치가 없습니다.")
 
@@ -100,6 +123,7 @@ def make_rebuild(core, original_rebuild):
             "lexemes": int(stats.get("lexemes", 0)),
             "surface_forms": int(stats.get("surfaces", 0)),
             "one_char_nouns": int(stats.get("one_char_nouns", 0)),
+            "unknown_lexemes": int(stats.get("unknown_lexemes", 0)),
             "active_nodes": len(graph.get("edges", {})),
         })
         return result
@@ -122,8 +146,8 @@ def make_ingest(core):
             encoding="utf-8",
         )
 
-        # A new document can change grammatical evidence, so v0.5 rebuilds
-        # the lexicon and graph from the preserved Corpus as one transaction.
+        # New corpus can change grammatical evidence, so rebuild the lexicon
+        # and graph transactionally from preserved source documents.
         result = core.rebuild_wordmap(vault, window=window)
         result.update({
             "source": source_name,
@@ -138,16 +162,20 @@ def make_ingest(core):
 def make_ask(core, original_ask):
     def ask(vault, question, limit=20, depth=2):
         _load(core, vault)
-        result = original_ask(vault, question, limit=limit, depth=depth)
+        result = original_ask(
+            vault,
+            question,
+            limit=limit,
+            depth=depth,
+        )
 
-        # Never turn a rejected fragment into a fuzzy graph search. This is
-        # what prevents input such as "많" from producing arbitrary neighbors.
+        # Do not turn a rejected fragment into fuzzy graph search.
         if not result.get("query_tokens"):
             result["seed_tokens"] = []
             result["results"] = []
             result["warning"] = (
                 "유효한 표제어를 찾지 못했습니다. "
-                "한 글자 조각이나 문법적으로 불완전한 형태는 검색하지 않습니다."
+                "문법적으로 불완전한 조각은 검색하지 않습니다."
             )
         return result
 
@@ -168,6 +196,7 @@ def make_status(core, original_status):
             "lexemes": int(stats.get("lexemes", 0)),
             "surface_forms": int(stats.get("surfaces", 0)),
             "one_char_nouns": int(stats.get("one_char_nouns", 0)),
+            "unknown_lexemes": int(stats.get("unknown_lexemes", 0)),
         })
         return out
 
@@ -175,11 +204,16 @@ def make_status(core, original_status):
 
 
 def apply(core):
+    global _TOKEN_STOPWORDS
+
     original_rebuild = core.rebuild_wordmap
     original_ask = core.ask
     original_status = core.status
 
-    # Replace suffix shaving with dictionary-style surface resolution.
+    # cleaning.apply(core) runs before this module, so this captures both the
+    # original core stopwords and cleaning.py's extra stopwords.
+    _TOKEN_STOPWORDS = set(getattr(core, "STOPWORDS", set()))
+
     core.tokenize = tokenize
     core.rebuild_wordmap = make_rebuild(core, original_rebuild)
     core.ingest = make_ingest(core)
