@@ -42,7 +42,7 @@ fi
 echo "[WordMap] 업데이트 적용 중..."
 git pull --ff-only
 
-if python -m py_compile core.py cleaning.py launch.py wordmap_mobile.py; then
+if python -m py_compile core.py cleaning.py relations.py ui_patch.py launch.py wordmap_mobile.py; then
   NEW_VERSION="$(cat VERSION 2>/dev/null || echo unknown)"
   echo "[WordMap] 업데이트 완료: $OLD_VERSION -> $NEW_VERSION"
   echo "[WordMap] 서버가 실행 중이었다면 Ctrl+C로 종료 후 bash start.sh 로 다시 실행하세요."
