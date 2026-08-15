@@ -6,7 +6,7 @@ from pathlib import Path
 import grammar
 import lexicon as lexicon_mod
 
-VERSION = "0.5.1"
+VERSION = "0.5.2"
 
 _ACTIVE = {
     "version": VERSION,
@@ -46,27 +46,30 @@ def _texts(core, vault):
     return [(path, core.corpus_body(path)) for path in files]
 
 
+def _accepted(entry, surface):
+    if not entry or not entry.get("lemma"):
+        return False
+    lemma = entry["lemma"]
+    if surface in _TOKEN_STOPWORDS or lemma in _TOKEN_STOPWORDS:
+        return False
+    if len(lemma) == 1 and entry.get("pos") not in {"noun", "proper"}:
+        return False
+    return True
+
+
+def resolve_surface(surface):
+    return [
+        entry
+        for entry in lexicon_mod.resolve_many(_ACTIVE, surface)
+        if _accepted(entry, surface)
+    ]
+
+
 def tokenize(text):
     out = []
     for surface in grammar.raw_words(text):
-        entry = lexicon_mod.resolve(_ACTIVE, surface)
-        if not entry or not entry.get("lemma"):
-            continue
-
-        lemma = entry["lemma"]
-
-        # v0.5.0 accidentally bypassed the cleaner's stopword set after
-        # replacing core.tokenize. Restore the exact same language filter here.
-        if surface in _TOKEN_STOPWORDS or lemma in _TOKEN_STOPWORDS:
-            continue
-
-        # Unsupported one-syllable grammatical fragments must not become graph
-        # nodes. Corpus-supported nouns such as 황/돈 still survive.
-        if len(lemma) == 1 and entry.get("pos") not in {"noun", "proper"}:
-            continue
-
-        out.append(lemma)
-
+        for entry in resolve_surface(surface):
+            out.append(entry["lemma"])
     return out
 
 
@@ -94,8 +97,6 @@ def _annotate_graph(core, vault, data):
         "lexicon_stats": data.get("stats", {}),
     }
     core.save_graph(vault, graph)
-
-    # Re-write generated notes after POS/form metadata is attached.
     core.save_notes(vault, graph)
     return graph
 
@@ -146,8 +147,6 @@ def make_ingest(core):
             encoding="utf-8",
         )
 
-        # New corpus can change grammatical evidence, so rebuild the lexicon
-        # and graph transactionally from preserved source documents.
         result = core.rebuild_wordmap(vault, window=window)
         result.update({
             "source": source_name,
@@ -169,7 +168,17 @@ def make_ask(core, original_ask):
             depth=depth,
         )
 
-        # Do not turn a rejected fragment into fuzzy graph search.
+        analyses = []
+        for surface in grammar.raw_words(question):
+            entries = resolve_surface(surface)
+            if entries:
+                analyses.append({
+                    "surface": surface,
+                    "lemmas": [entry["lemma"] for entry in entries],
+                    "compound": len(entries) > 1,
+                })
+        result["surface_analysis"] = analyses
+
         if not result.get("query_tokens"):
             result["seed_tokens"] = []
             result["results"] = []
@@ -210,8 +219,6 @@ def apply(core):
     original_ask = core.ask
     original_status = core.status
 
-    # cleaning.apply(core) runs before this module, so this captures both the
-    # original core stopwords and cleaning.py's extra stopwords.
     _TOKEN_STOPWORDS = set(getattr(core, "STOPWORDS", set()))
 
     core.tokenize = tokenize
