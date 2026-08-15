@@ -6,7 +6,7 @@ from pathlib import Path
 
 import grammar
 
-VERSION = "0.5.1"
+VERSION = "0.5.2"
 
 
 def lexeme_id(pos, lemma):
@@ -63,9 +63,7 @@ def build(texts):
                 if lid not in surface_index[surface]:
                     surface_index[surface].append(lid)
 
-    # If the corpus proves a lemma as a real POS, absorb an unknown bare form
-    # of the exact same spelling. This removes duplicate lexemes such as
-    # noun:고무 + unknown:고무 and noun:가격 + unknown:가격.
+    # Absorb an unknown bare form into a corpus-proven POS with the same lemma.
     by_lemma = defaultdict(list)
     for lid, entry in entries.items():
         by_lemma[entry["lemma"]].append(lid)
@@ -92,8 +90,7 @@ def build(texts):
             del entries[loser]
 
     # A standalone root observed together with root+하다 is often a valid noun
-    # as well (분석/분석하다, 사용/사용하다). Promote only roots that actually
-    # occurred in the corpus, rather than maintaining a domain word list.
+    # as well (분석/분석하다, 사용/사용하다).
     for lid in list(entries):
         entry = entries.get(lid)
         if not entry or entry["pos"] != "unknown":
@@ -127,8 +124,6 @@ def build(texts):
         redirects[lid] = noun_id
         del entries[lid]
 
-    # Rewrite the index after merges and also index the lemma itself. The bare
-    # dictionary form can then resolve even if only an inflected form occurred.
     clean_index = defaultdict(list)
     for surface, lids in surface_index.items():
         for lid in lids:
@@ -196,7 +191,6 @@ def resolve(data, surface):
     if best:
         return best
 
-    # Resolve a dictionary lemma even if this exact bare surface did not occur.
     best = _rank([
         entry
         for entry in entries.values()
@@ -205,8 +199,6 @@ def resolve(data, surface):
     if best:
         return best
 
-    # Resolve an unseen case-marked form from a noun lemma already proven by
-    # the corpus. This improves both user queries and semantic head extraction.
     candidate = grammar.particle_candidate(surface)
     if candidate:
         base, _particle = candidate
@@ -219,6 +211,107 @@ def resolve(data, surface):
             return best
 
     return None
+
+
+def _compound_lemma_index(data):
+    """Return safe components for query-time compound splitting.
+
+    Only corpus-proven nouns/proper nouns with at least two characters are used.
+    This deliberately refuses fragile one-syllable cuts such as 자동차 -> 자동+차.
+    """
+    out = {}
+    for entry in data.get("entries", {}).values():
+        lemma = str(entry.get("lemma", ""))
+        if entry.get("pos") not in {"noun", "proper"}:
+            continue
+        if len(lemma) < 2:
+            continue
+        confidence = float(entry.get("confidence", 0))
+        if confidence < 0.72:
+            continue
+        old = out.get(lemma)
+        if old is None or confidence > float(old.get("confidence", 0)):
+            out[lemma] = entry
+    return out
+
+
+def split_compound(data, surface, max_parts=4):
+    """Split an unknown fused noun using known dictionary lemmas.
+
+    Whole-word known lexemes always win. Unknown whole-word entries do not block
+    a strong noun+noun analysis such as 고무가황 -> 고무 + 가황.
+    """
+    surface = surface.strip("._-/").lower()
+    if len(surface) < 4:
+        return []
+
+    whole = resolve(data, surface)
+    if whole and whole.get("pos") != "unknown":
+        return [whole]
+
+    lemma_index = _compound_lemma_index(data)
+    n = len(surface)
+    memo = {}
+
+    def solve(i, parts_left):
+        key = (i, parts_left)
+        if key in memo:
+            return memo[key]
+        if i == n:
+            return (0.0, [])
+        if parts_left <= 0:
+            return None
+
+        best = None
+        for j in range(i + 2, n + 1):
+            piece = surface[i:j]
+            entry = lemma_index.get(piece)
+            if not entry:
+                continue
+            tail = solve(j, parts_left - 1)
+            if tail is None:
+                continue
+
+            confidence = float(entry.get("confidence", 0))
+            frequency = sum(
+                int(v) for v in entry.get("forms_seen", {}).values()
+            )
+            piece_score = confidence * 2.0 + min(frequency, 8) * 0.05
+            score = piece_score + tail[0]
+            path = [entry] + tail[1]
+
+            if best is None or score > best[0]:
+                best = (score, path)
+
+        memo[key] = best
+        return best
+
+    result = solve(0, max_parts)
+    if not result:
+        return []
+
+    path = result[1]
+    if len(path) < 2:
+        return []
+    if "".join(item["lemma"] for item in path) != surface:
+        return []
+    if min(float(item.get("confidence", 0)) for item in path) < 0.72:
+        return []
+    return path
+
+
+def resolve_many(data, surface):
+    """Resolve one surface into one lexeme or a safe compound sequence."""
+    surface = surface.strip("._-/").lower()
+    direct = resolve(data, surface)
+    if direct and direct.get("pos") != "unknown":
+        return [direct]
+
+    compound = split_compound(data, surface)
+    if compound:
+        return compound
+
+    return [direct] if direct else []
 
 
 def by_lemma(data):
