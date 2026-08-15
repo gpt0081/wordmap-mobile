@@ -4,10 +4,10 @@ import re
 from collections import defaultdict
 from datetime import datetime
 
-VERSION = "0.4.0"
+VERSION = "0.5.1"
 
 RELATION_LABELS = {
-    "is_a": "종류",
+    "is_a": "종류/정의",
     "used_for": "사용처",
     "promotes": "촉진",
     "increases": "증가",
@@ -19,8 +19,6 @@ RELATION_LABELS = {
     "requires": "필요",
 }
 
-# High-precision Korean surface patterns only. The goal is to make arrows
-# meaningful, not to pretend we have a full parser.
 SUBJ = r"(?P<s>[가-힣A-Za-z0-9+._/-]{1,40})"
 OBJ = r"(?P<o>[가-힣A-Za-z0-9+._/-]+(?:\s+[가-힣A-Za-z0-9+._/-]+){0,3})"
 
@@ -105,19 +103,51 @@ PATTERNS = [
             re.I,
         ),
     ),
+    # Keep '필요' extraction high precision. Anchoring avoids interpreting
+    # connective/location phrases such as '위해서는' or '사이에는' as a
+    # semantic source node.
     (
         "requires",
         0.86,
         re.compile(
-            rf"{SUBJ}(?:은|는|에|에는)\s+{OBJ}(?:이|가)\s+필요(?:하다|합니다)",
+            rf"^{SUBJ}(?:은|는|이|가)\s+{OBJ}(?:이|가)\s+필요(?:하다|합니다)",
+            re.I,
+        ),
+    ),
+    # Safe contracted nominal predicate: '황은 대표적인 가황제다',
+    # '고무는 탄성이 높은 재료다'. An adnominal descriptor is required before
+    # the final noun, so ordinary verbs ending in -다 are not treated as is-a.
+    (
+        "is_a",
+        0.84,
+        re.compile(
+            rf"{SUBJ}(?:은|는)\s+(?:[가-힣A-Za-z0-9+._/-]+\s+){{0,2}}"
+            rf"[가-힣A-Za-z0-9+._/-]+(?:한|은|적인)\s+"
+            rf"(?P<o>[가-힣A-Za-z0-9+._/-]{{2,40}})다\.?$",
             re.I,
         ),
     ),
 ]
 
 RELATION_WORDS = {
-    "종류", "사용", "사용되다", "쓰이다", "촉진", "가속", "증가", "감소",
-    "영향", "구성", "유발", "발생", "필요", "우수", "높다", "낮다", "좋다",
+    "종류",
+    "사용",
+    "사용하다",
+    "사용되다",
+    "쓰이다",
+    "촉진",
+    "가속",
+    "증가",
+    "감소",
+    "영향",
+    "구성",
+    "유발",
+    "발생",
+    "필요",
+    "우수",
+    "높다",
+    "낮다",
+    "좋다",
 }
 
 
@@ -126,13 +156,48 @@ def _clean_phrase(phrase: str) -> str:
 
 
 def _pick_token(core, phrase: str):
-    tokens = [
-        t for t in core.tokenize(_clean_phrase(phrase))
-        if t not in RELATION_WORDS
+    """Choose the rightmost semantic head of a Korean phrase.
+
+    v0.5.0 tokenized an entire phrase and returned the last *resolved* token.
+    For '기업의 의사결정' the bare head 의사결정 was unresolved, so 기업 was
+    incorrectly selected. v0.5.1 tries the rightmost surface first; the Lexicon
+    can resolve a known lemma even if only 의사결정에 occurred in the corpus.
+    """
+    cleaned = _clean_phrase(phrase)
+    raw = [
+        x.strip("._-/")
+        for x in re.findall(r"[가-힣A-Za-z0-9+._/-]+", cleaned)
     ]
-    if not tokens:
-        return None
-    return tokens[-1]
+
+    if raw:
+        head = raw[-1]
+        tokens = [
+            token
+            for token in core.tokenize(head)
+            if token not in RELATION_WORDS
+        ]
+        if tokens:
+            return tokens[-1]
+
+    tokens = [
+        token
+        for token in core.tokenize(cleaned)
+        if token not in RELATION_WORDS
+    ]
+    if tokens:
+        return tokens[-1]
+
+    # A high-precision relation rule is itself evidence that the captured head
+    # is a concept. Preserve it whole instead of shaving guessed suffixes.
+    if raw:
+        head = raw[-1].lower()
+        if (
+            head not in RELATION_WORDS
+            and re.fullmatch(r"[가-힣A-Za-z0-9+._/-]{2,40}", head)
+        ):
+            return head
+
+    return None
 
 
 def extract_relations(core, text: str):
@@ -177,7 +242,11 @@ def accumulate_relations(graph, relations):
     bucket = graph.setdefault("relations", {})
 
     for item in relations:
-        key = _relation_key(item["source"], item["relation"], item["target"])
+        key = _relation_key(
+            item["source"],
+            item["relation"],
+            item["target"],
+        )
         old = bucket.get(key)
 
         if old is None:
@@ -194,7 +263,10 @@ def accumulate_relations(graph, relations):
 
         old["count"] = int(old.get("count", 0)) + 1
         old["confidence"] = round(
-            max(float(old.get("confidence", 0)), float(item["confidence"])),
+            max(
+                float(old.get("confidence", 0)),
+                float(item["confidence"]),
+            ),
             3,
         )
         evidence = old.setdefault("evidence", [])
@@ -205,8 +277,12 @@ def accumulate_relations(graph, relations):
 def make_analyze_into_graph(core, original):
     def analyze_into_graph(graph, text, window=4):
         stats = original(graph, text, window=window)
-        accumulate_relations(graph, extract_relations(core, text))
+        accumulate_relations(
+            graph,
+            extract_relations(core, text),
+        )
         return stats
+
     return analyze_into_graph
 
 
@@ -247,22 +323,34 @@ def make_save_notes(core):
             incoming[target].append(rel)
 
         association_nodes = {
-            token for token, neighbors in assoc_edges.items() if neighbors
+            token
+            for token, neighbors in assoc_edges.items()
+            if neighbors
         }
         active_nodes = association_nodes | semantic_nodes
         stamp = datetime.now().isoformat(timespec="seconds")
 
         for token in sorted(active_nodes):
-            meta = graph.get("nodes", {}).get(token, {"frequency": 0})
+            meta = graph.get("nodes", {}).get(
+                token,
+                {"frequency": 0},
+            )
             frequency = int(meta.get("frequency", 0))
 
             rel_lines = []
             for rel in sorted(
                 outgoing.get(token, []),
-                key=lambda x: (-float(x.get("confidence", 0)), -int(x.get("count", 0)), x.get("target", "")),
+                key=lambda x: (
+                    -float(x.get("confidence", 0)),
+                    -int(x.get("count", 0)),
+                    x.get("target", ""),
+                ),
             ):
                 target = rel["target"]
-                label = rel.get("label", rel.get("relation", "관계"))
+                label = rel.get(
+                    "label",
+                    rel.get("relation", "관계"),
+                )
                 confidence = float(rel.get("confidence", 0))
                 count = int(rel.get("count", 1))
                 rel_lines.append(
@@ -275,11 +363,14 @@ def make_save_notes(core):
             incoming_lines = []
             for rel in sorted(
                 incoming.get(token, []),
-                key=lambda x: (-float(x.get("confidence", 0)), x.get("source", "")),
+                key=lambda x: (
+                    -float(x.get("confidence", 0)),
+                    x.get("source", ""),
+                ),
             )[:10]:
-                # No wiki link: a backlink would create a fake reverse arrow.
                 incoming_lines.append(
-                    f"- {rel.get('source')} —{rel.get('label', '관계')}→ {token}"
+                    f"- {rel.get('source')} —"
+                    f"{rel.get('label', '관계')}→ {token}"
                 )
             if not incoming_lines:
                 incoming_lines = ["- 없음"]
@@ -290,8 +381,9 @@ def make_save_notes(core):
                 reverse=True,
             )[:min(int(top), 10)]
             assoc_lines = [
-                f"- {neighbor} · strength={float(edge.get('score', 0)):.4f} "
-                f"· co={float(edge.get('co', 0)):.2f}"
+                f"- {neighbor} · "
+                f"strength={float(edge.get('score', 0)):.4f} · "
+                f"co={float(edge.get('co', 0)):.2f}"
                 for neighbor, edge in ranked
             ] or ["- 연관 단어 없음"]
 
@@ -304,13 +396,19 @@ def make_save_notes(core):
                 "---\n\n"
                 f"# {token}\n\n"
                 f"빈도: **{frequency}**\n\n"
-                "## 의미 관계\n" + "\n".join(rel_lines)
-                + "\n\n## 들어오는 관계\n" + "\n".join(incoming_lines)
-                + "\n\n## 연관 단어 · 방향 없음\n" + "\n".join(assoc_lines)
+                "## 의미 관계\n"
+                + "\n".join(rel_lines)
+                + "\n\n## 들어오는 관계\n"
+                + "\n".join(incoming_lines)
+                + "\n\n## 연관 단어 · 방향 없음\n"
+                + "\n".join(assoc_lines)
                 + "\n"
             )
 
-            (words_dir / f"{core.safe(token)}.md").write_text(body, encoding="utf-8")
+            (words_dir / f"{core.safe(token)}.md").write_text(
+                body,
+                encoding="utf-8",
+            )
 
     return save_notes
 
@@ -328,26 +426,40 @@ def _semantic_paths(graph, seeds, max_paths=16):
 
     for seed in seeds:
         for first in outgoing.get(seed, []):
-            key = (seed, first.get("relation"), first.get("target"))
+            key = (
+                seed,
+                first.get("relation"),
+                first.get("target"),
+            )
             if key not in seen:
                 seen.add(key)
                 paths.append({
                     "depth": 1,
-                    "text": f"{seed} →({first.get('label', '관계')})→ {first.get('target')}",
+                    "text": (
+                        f"{seed} →({first.get('label', '관계')})→ "
+                        f"{first.get('target')}"
+                    ),
                     "confidence": float(first.get("confidence", 0)),
                 })
 
             middle = first.get("target")
             for second in outgoing.get(middle, []):
-                key2 = (seed, first.get("relation"), middle, second.get("relation"), second.get("target"))
+                key2 = (
+                    seed,
+                    first.get("relation"),
+                    middle,
+                    second.get("relation"),
+                    second.get("target"),
+                )
                 if key2 in seen:
                     continue
                 seen.add(key2)
                 paths.append({
                     "depth": 2,
                     "text": (
-                        f"{seed} →({first.get('label', '관계')})→ {middle} "
-                        f"→({second.get('label', '관계')})→ {second.get('target')}"
+                        f"{seed} →({first.get('label', '관계')})→ "
+                        f"{middle} →({second.get('label', '관계')})→ "
+                        f"{second.get('target')}"
                     ),
                     "confidence": min(
                         float(first.get("confidence", 0)),
@@ -355,16 +467,31 @@ def _semantic_paths(graph, seeds, max_paths=16):
                     ),
                 })
 
-    paths.sort(key=lambda x: (-x["confidence"], x["depth"], x["text"]))
+    paths.sort(
+        key=lambda x: (
+            -x["confidence"],
+            x["depth"],
+            x["text"],
+        )
+    )
     return paths[:max_paths]
 
 
 def make_ask(core, original):
     def ask(vault, question, limit=20, depth=2):
-        result = original(vault, question, limit=limit, depth=depth)
+        result = original(
+            vault,
+            question,
+            limit=limit,
+            depth=depth,
+        )
         graph = core.load_graph(vault)
-        result["semantic_paths"] = _semantic_paths(graph, result.get("seed_tokens", []))
+        result["semantic_paths"] = _semantic_paths(
+            graph,
+            result.get("seed_tokens", []),
+        )
         return result
+
     return ask
 
 
@@ -374,13 +501,18 @@ def make_status(core, original):
         vault = out.get("vault")
         if not vault:
             return out
+
         graph = core.load_graph(vault)
         rels = _relations_list(graph)
         out["semantic_relations"] = len(rels)
         out["semantic_nodes"] = len({
-            x for rel in rels for x in (rel.get("source"), rel.get("target")) if x
+            x
+            for rel in rels
+            for x in (rel.get("source"), rel.get("target"))
+            if x
         })
         return out
+
     return status
 
 
@@ -389,7 +521,10 @@ def apply(core):
     original_ask = core.ask
     original_status = core.status
 
-    core.analyze_into_graph = make_analyze_into_graph(core, original_analyze)
+    core.analyze_into_graph = make_analyze_into_graph(
+        core,
+        original_analyze,
+    )
     core.save_notes = make_save_notes(core)
     core.ask = make_ask(core, original_ask)
     core.status = make_status(core, original_status)
