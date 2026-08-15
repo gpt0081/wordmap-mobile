@@ -2,6 +2,7 @@
 
 import re
 
+import generation
 import grammar
 import lexicon
 import relations
@@ -56,11 +57,9 @@ def main():
     assert len(price_entries) == 1 and price_entries[0]["pos"] == "noun", price_entries
     assert len(rubber_entries) == 1 and rubber_entries[0]["pos"] == "noun", rubber_entries
 
-    # Unknown fused nouns may split only into corpus-proven noun/proper lemmas.
     compound = lexicon.resolve_many(data, "고무가황")
     assert [x["lemma"] for x in compound] == ["고무", "가황"], compound
 
-    # A known whole dictionary word must beat a possible decomposition.
     automobile = lexicon.resolve_many(data, "자동차")
     assert len(automobile) == 1 and automobile[0]["lemma"] == "자동차", automobile
 
@@ -101,7 +100,7 @@ def main():
         for _source, _relation, target in triples
     ), triples
 
-    # Ordered sequence statistics are separate from undirected association edges.
+    # Ordered next-word statistics.
     graph = {}
     sequence.accumulate_sequence(graph, ["고무", "배합"])
     sequence.accumulate_sequence(graph, ["고무", "배합"])
@@ -111,7 +110,52 @@ def main():
     assert ranked[1]["token"] == "가황" and ranked[1]["count"] == 1, ranked
     assert ranked[0]["probability"] > ranked[1]["probability"], ranked
 
-    print("WordMap v0.5.2 language/relations/sequence self-test: OK")
+    # Corpus-grounded surface realization. The generator must recover the
+    # observed Korean forms rather than output bare lemmas such as
+    # '고무 가황 사용하다'.
+    sentence_graph = {}
+    for _ in range(3):
+        sequence.accumulate_sequence(
+            sentence_graph,
+            ["고무", "가황", "사용하다"],
+        )
+        generation.accumulate_generation(
+            sentence_graph,
+            [
+                ("고무", "고무는"),
+                ("가황", "가황에"),
+                ("사용하다", "사용된다"),
+            ],
+        )
+
+    generated = generation.generate_sequence_sentences(
+        sentence_graph,
+        "고무",
+        limit=3,
+    )
+    assert generated, generated
+    assert generated[0]["text"] == "고무는 가황에 사용된다.", generated
+
+    semantic_graph = {
+        "relations": {
+            "x": {
+                "source": "황",
+                "relation": "used_for",
+                "label": "사용처",
+                "target": "가황",
+                "confidence": 0.92,
+                "evidence": ["황은 가황에 사용된다."],
+            }
+        }
+    }
+    semantic = generation.generate_semantic_sentences(
+        semantic_graph,
+        ["황"],
+        limit=3,
+    )
+    assert semantic and semantic[0]["text"] == "황은 가황에 사용된다.", semantic
+
+    print("WordMap v0.6.0 language/relations/sequence/generation self-test: OK")
 
 
 if __name__ == "__main__":
