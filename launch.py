@@ -5,6 +5,7 @@ import cleaning
 import language
 import relations
 import hybrid
+import sequence
 import lexicon_notes
 
 # Order matters:
@@ -12,11 +13,13 @@ import lexicon_notes
 # 2) dictionary-style surface -> lemma/POS resolution
 # 3) semantic relation extraction on normalized lemmas
 # 4) sparse association links
-# 5) expose lexicon metadata in Obsidian notes
+# 5) ordered next-word statistics from real sentence order
+# 6) expose lexicon metadata in Obsidian notes
 cleaning.apply(core)
 language.apply(core)
 relations.apply(core)
 hybrid.apply(core, relations)
+sequence.apply(core)
 lexicon_notes.apply(core)
 
 import wordmap_mobile
