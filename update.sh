@@ -18,10 +18,7 @@ fi
 
 if [ -n "$(git status --porcelain)" ]; then
   echo "[WordMap] 로컬 코드 변경사항이 있어 자동 업데이트를 중단합니다."
-  echo "git status:"
   git status --short
-  echo
-  echo "코드 변경사항을 보존한 뒤 다시 실행하세요."
   exit 1
 fi
 
@@ -42,10 +39,13 @@ fi
 echo "[WordMap] 업데이트 적용 중..."
 git pull --ff-only
 
-if python -m py_compile core.py cleaning.py relations.py hybrid.py ui_patch.py launch.py wordmap_mobile.py; then
+if python -m py_compile \
+  core.py cleaning.py grammar.py lexicon.py language.py \
+  relations.py hybrid.py lexicon_notes.py ui_patch.py \
+  launch.py wordmap_mobile.py; then
   NEW_VERSION="$(cat VERSION 2>/dev/null || echo unknown)"
   echo "[WordMap] 업데이트 완료: $OLD_VERSION -> $NEW_VERSION"
-  echo "[WordMap] 서버가 실행 중이었다면 Ctrl+C로 종료 후 bash start.sh 로 다시 실행하세요."
+  echo "[WordMap] 서버가 실행 중이었다면 Ctrl+C 후 bash start.sh 로 다시 실행하세요."
 else
   echo "[WordMap] 새 코드 문법 검사 실패. 이전 버전으로 되돌립니다."
   git reset --hard "$OLD_COMMIT"
