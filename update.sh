@@ -41,7 +41,7 @@ git pull --ff-only
 
 if python -m py_compile \
   core.py cleaning.py grammar.py lexicon.py language.py \
-  relations.py hybrid.py lexicon_notes.py ui_patch.py \
+  relations.py hybrid.py sequence.py lexicon_notes.py ui_patch.py \
   selftest.py launch.py wordmap_mobile.py \
   && python selftest.py; then
   NEW_VERSION="$(cat VERSION 2>/dev/null || echo unknown)"
