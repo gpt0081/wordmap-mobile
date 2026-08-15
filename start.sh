@@ -36,4 +36,4 @@ echo
   fi
 ) &
 
-exec python wordmap_mobile.py --host 127.0.0.1 --port "$PORT"
+exec python launch.py --host 127.0.0.1 --port "$PORT"
