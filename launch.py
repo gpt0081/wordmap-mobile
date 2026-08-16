@@ -7,6 +7,7 @@ import relations
 import hybrid
 import sequence
 import generation
+import syntax_tags
 import lexicon_notes
 
 # Order matters:
@@ -16,13 +17,15 @@ import lexicon_notes
 # 4) sparse association links
 # 5) ordered next-word statistics from real sentence order
 # 6) corpus-grounded sentence generation + semantic realization
-# 7) expose lexicon metadata in Obsidian notes
+# 7) Korean grammar tags, sentence-role patterns, question-intent filtering
+# 8) expose lexicon + grammar metadata in Obsidian notes
 cleaning.apply(core)
 language.apply(core)
 relations.apply(core)
 hybrid.apply(core, relations)
 sequence.apply(core)
 generation.apply(core)
+syntax_tags.apply(core)
 lexicon_notes.apply(core)
 
 import wordmap_mobile
