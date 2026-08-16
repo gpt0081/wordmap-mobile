@@ -43,20 +43,23 @@ if python -m py_compile \
   core.py cleaning.py corpus_filter.py grammar.py lexicon.py language.py corpus_manager.py \
   relations.py relation_guard.py hybrid.py sequence.py generation.py generation_tokens.py \
   syntax_tags.py syntax_bridge.py event_graph.py activation.py wordmap_gpt2.py event_guidance.py \
-  visualizer.py lexicon_notes.py ui_patch.py corpus_web.py visual_ui.py benchmark.py \
-  selftest.py selftest_gpt2.py selftest_v010.py selftest_v012.py selftest_v013.py selftest_visualizer.py \
+  visualizer.py lexicon_notes.py node_health.py ui_patch.py corpus_web.py visual_ui.py node_health_web.py benchmark.py \
+  selftest.py selftest_gpt2.py selftest_v010.py selftest_v012.py selftest_v013.py selftest_v014.py selftest_visualizer.py \
   launch.py wordmap_mobile.py \
   && python selftest.py \
   && python selftest_gpt2.py \
   && python selftest_v010.py \
   && python selftest_v012.py \
   && python selftest_v013.py \
+  && python selftest_v014.py \
   && python selftest_visualizer.py; then
   NEW_VERSION="$(cat VERSION 2>/dev/null || echo unknown)"
   echo "[WordMap] 업데이트 완료: $OLD_VERSION -> $NEW_VERSION"
-  echo "[WordMap] v0.13 Corpus Manager가 추가되었습니다. 기존 말뭉치는 모두 '사용' 상태로 유지됩니다."
-  echo "[WordMap] 업그레이드 직후 전체 재생성은 필요 없습니다."
-  echo "[WordMap] 말뭉치를 끄거나 수정/삭제한 뒤에는 웹의 '활성 말뭉치로 전체 재생성'을 실행하세요."
+  echo "[WordMap] v0.14 Node Health / Orphan Analyzer가 추가되었습니다."
+  echo "[WordMap] 진짜 고립, 약한 고립, 시각적 고립, 태그 필터 고립을 분리해 진단합니다."
+  echo "[WordMap] 전문용어/희귀어와 고립 노드는 자동 삭제하지 않습니다."
+  echo "[WordMap] 업그레이드 직후 전체 Corpus 재생성은 필요 없습니다. 웹의 '건강도 다시 계산'만 실행할 수 있습니다."
+  echo "[WordMap] 말뭉치를 끄거나 수정/삭제했다면 기존처럼 활성 말뭉치로 전체 재생성을 실행하세요."
   echo "[WordMap] 서버가 실행 중이었다면 Ctrl+C 후 bash start.sh 로 다시 실행하세요."
 else
   echo "[WordMap] 새 버전 검사 실패. 이전 버전으로 되돌립니다."
