@@ -55,7 +55,7 @@ window.askQ = async function(){
     if(generated.length){
       generatedHtml='<div class="result"><div class="token">생성 문장 후보</div>'
         +generated.map((x,i)=>{
-          let mode=x.mode==='semantic'?'의미관계 기반':'말뭉치 순서 기반';
+          let mode=x.mode==='semantic'?'의미관계 기반':(x.mode==='wordmap_gpt2'?'단어지도 GPT-2식':'말뭉치 순서 기반');
           let path=(x.path||[]).map(esc).join(' → ');
           let pattern=x.grammar_pattern||'';
           let patternCount=Number(x.grammar_pattern_count||0);
@@ -67,6 +67,31 @@ window.askQ = async function(){
               +esc(pattern)+(patternCount?' · 관찰 '+patternCount+'회':'')+'</div>':'')
             +(activeSupport?'<div class="meta" style="margin-top:3px">문맥 지지도: '
               +activeSupport.toFixed(3)+'</div>':'')
+            +'</div>';
+        }).join('')
+        +'</div>';
+    }
+
+    let trace=(d['자동회귀생성과정']||[]);
+    let traceHtml='';
+    if(trace.length){
+      traceHtml='<div class="result"><div class="token">단어지도 GPT-2 생성 과정</div>'
+        +trace.map((step,i)=>{
+          let context=(step['이전문맥']||[]).map(esc).join(' → ');
+          let chosen=esc(step['선택표면형']||step['선택']||'');
+          let candidates=(step['후보상위']||[]).slice(0,3).map(c=>{
+            return esc(c['표면형']||c['표제어']||'')
+              +' '+(Number(c['선택확률']||0)*100).toFixed(1)+'%'
+              +' [순서 '+Number(c['순서확률']||0).toFixed(2)
+              +' · 문맥 '+Number(c['문맥활성']||0).toFixed(2)
+              +' · 문법 '+Number(c['문법적합']||0).toFixed(2)+']';
+          }).join('<br>');
+          return '<div style="margin-top:12px"><b>'+(i+1)+'. '+(context?context+' → ':'')+chosen+'</b>'
+            +'<div class="meta" style="margin-top:4px">선택 확률 '
+            +(Number(step['선택확률']||0)*100).toFixed(1)+'% · 문맥활성 '
+            +Number(step['선택문맥활성']||0).toFixed(3)+' · 문법적합 '
+            +Number(step['선택문법적합']||0).toFixed(3)+'</div>'
+            +(candidates?'<div class="meta" style="margin-top:5px">후보<br>'+candidates+'</div>':'')
             +'</div>';
         }).join('')
         +'</div>';
@@ -98,13 +123,15 @@ window.askQ = async function(){
     }
 
     box.innerHTML=
-      '<div class="meta">질문 토큰: '+d.query_tokens.map(esc).join(', ')
+      '<div class="meta">생성 모델: '+esc(d['생성모델']||'기본')
+      +'<br>질문 토큰: '+d.query_tokens.map(esc).join(', ')
       +'<br>시작 노드: '+d.seed_tokens.map(esc).join(', ')+'</div>'
       +(d.warning?'<div class="warn">'+esc(d.warning)+'</div>':'')
       +questionHtml
-      +activeHtml
       +analysisHtml
       +generatedHtml
+      +traceHtml
+      +activeHtml
       +nextHtml
       +semanticHtml
       +d.results.map((x,i)=>
