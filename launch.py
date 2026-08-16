@@ -11,6 +11,7 @@ import sequence
 import generation
 import generation_tokens
 import syntax_tags
+import syntax_bridge
 import activation
 import wordmap_gpt2
 import lexicon_notes
@@ -24,9 +25,10 @@ import lexicon_notes
 # 6) ordered graph next-word statistics
 # 7) grammar-preserving generation token stream + sentence statistics
 # 8) Korean grammar tags and normalized sentence patterns
-# 9) dynamic context activation
-# 10) WordMap GPT-2 autoregressive generation with expanded candidates
-# 11) expose lexicon + grammar metadata in Obsidian notes
+# 9) bridge graph-less grammar words back into generation pattern checks
+# 10) dynamic context activation
+# 11) WordMap GPT-2 autoregressive generation with expanded candidates
+# 12) expose lexicon + grammar metadata in Obsidian notes
 cleaning.apply(core)
 corpus_filter.apply(core)
 language.apply(core)
@@ -37,6 +39,7 @@ sequence.apply(core)
 generation_tokens.apply(generation)
 generation.apply(core)
 syntax_tags.apply(core)
+syntax_bridge.apply(syntax_tags)
 activation.apply(core)
 wordmap_gpt2.apply(core)
 lexicon_notes.apply(core)
