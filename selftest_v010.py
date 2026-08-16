@@ -2,12 +2,12 @@
 
 import activation
 import corpus_filter
-import generation
 import generation_tokens
 import grammar
 import language
 import lexicon
 import relation_guard
+import syntax_bridge
 import syntax_tags
 import wordmap_gpt2
 
@@ -41,6 +41,7 @@ def main():
     data = lexicon.build(corpus)
     language._TOKEN_STOPWORDS = {"있다", "된다", "되다", "한다", "하다", "수", "것"}
     language._set(data)
+    syntax_bridge.apply(syntax_tags)
 
     evidence = grammar.collect_evidence(corpus)
     eating = grammar.analyze_surface("먹는다", evidence)
@@ -68,6 +69,15 @@ def main():
     dependent = syntax_tags.analyze_sentence("할 수 있다.")
     lemmas = [x["표제어"] for x in dependent["토큰"]]
     assert "수" in lemmas and "있다" in lemmas, dependent
+
+    # Grammar-only tokens must still be predicates when a generated path is
+    # checked against sentence patterns even if they are absent from graph nodes.
+    bridged_pattern = syntax_tags.pattern_from_aligned(
+        {"nodes": {}},
+        ["수", "있다"],
+        ["수", "있다"],
+    )
+    assert bridged_pattern.endswith("서술어"), bridged_pattern
 
     # 4) Raw and normalized patterns are both preserved. Generation-facing
     # patterns collapse fragile surface distinctions.
