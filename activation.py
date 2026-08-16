@@ -12,6 +12,7 @@ SEQUENCE_WEIGHT = 0.34
 SECOND_HOP_DECAY = 0.55
 MAX_FRONTIER = 24
 MAX_NEIGHBORS = 14
+GENERATION_ACTIVATION_WEIGHT = 0.95
 
 
 def _clip(value):
@@ -90,11 +91,12 @@ def _base_state(seeds, path):
 
 
 def build_context_state(graph, seeds=None, path=None, steps=2):
-    """Build an explainable, GPT-2-inspired dynamic activation state.
+    """Build an explainable dynamic activation state from the current context.
 
-    This is intentionally not neural attention. It combines the current
-    context with explicit WordMap association edges, semantic relations, and
-    observed next-word statistics. Every score remains inspectable.
+    This is GPT-2-inspired in one narrow sense: the whole preceding context
+    changes the score of the next candidate. It is not neural attention. The
+    state is calculated from explicit WordMap associations, semantic edges,
+    and observed next-word statistics, so every contribution can be inspected.
     """
     seeds = [x for x in (seeds or []) if x]
     path = [x for x in (path or []) if x]
@@ -117,7 +119,6 @@ def build_context_state(graph, seeds=None, path=None, steps=2):
             if source_activation < 0.04:
                 continue
 
-            # Undirected association edges.
             assoc = graph.get("edges", {}).get(source, {}) or {}
             assoc_rows = sorted(
                 assoc.items(),
@@ -131,7 +132,6 @@ def build_context_state(graph, seeds=None, path=None, steps=2):
                 _add(scores, reasons, target, amount, f"연상 {source} ↔ {target}")
                 next_frontier[target] = _merge(next_frontier.get(target, 0.0), amount)
 
-            # Directed semantic relations carry more weight forward than back.
             for target, confidence, label in forward.get(source, [])[:MAX_NEIGHBORS]:
                 amount = source_activation * RELATION_FORWARD_WEIGHT * confidence * step_decay
                 _add(scores, reasons, target, amount, f"의미 {source} →({label})→ {target}")
@@ -142,7 +142,6 @@ def build_context_state(graph, seeds=None, path=None, steps=2):
                 _add(scores, reasons, target, amount, f"역방향 의미 {target} →({label})→ {source}")
                 next_frontier[target] = _merge(next_frontier.get(target, 0.0), amount)
 
-            # Ordered corpus evidence acts like a small next-token prior.
             seq = _sequence_row(graph, source)
             total = sum(max(0, int(v)) for v in seq.values())
             if total > 0:
@@ -212,6 +211,92 @@ def rerank_next_candidates(rows, state):
     return out
 
 
+def path_activation_support(graph, seed, path):
+    """Measure how well every next token is supported by its whole prefix."""
+    path = [x for x in (path or []) if x]
+    if len(path) < 2:
+        return 0.0, [], []
+
+    trace = []
+    weighted_sum = 0.0
+    weight_total = 0.0
+    final_state = None
+
+    for i in range(1, len(path)):
+        prefix = path[:i]
+        target = path[i]
+        state = build_context_state(graph, seeds=[seed], path=prefix, steps=2)
+        active = candidate_activation(state, target)
+        weight = 1.0 + (0.12 * i)
+        weighted_sum += active * weight
+        weight_total += weight
+        trace.append({
+            "문맥": list(prefix),
+            "후보": target,
+            "활성도": round(active, 4),
+        })
+        final_state = state
+
+    support = weighted_sum / weight_total if weight_total else 0.0
+    return round(support, 4), trace, top_rows(final_state or {}, limit=6, exclude=[])
+
+
+def rerank_generated_paths(graph, seed, rows, limit=3):
+    rescored = []
+    for row in rows or []:
+        item = dict(row)
+        support, trace, active_top = path_activation_support(
+            graph,
+            seed,
+            item.get("path", []),
+        )
+        item["activation_support"] = support
+        item["activation_trace"] = trace
+        item["context_activation"] = active_top
+        item["score"] = round(
+            float(item.get("score", 0)) + (GENERATION_ACTIVATION_WEIGHT * support),
+            4,
+        )
+        basis = str(item.get("basis", "")).strip()
+        if "동적 문맥 활성화" not in basis:
+            item["basis"] = (basis + " + 동적 문맥 활성화").strip(" +")
+        rescored.append(item)
+
+    rescored.sort(
+        key=lambda x: (
+            -float(x.get("score", 0)),
+            -float(x.get("activation_support", 0)),
+            len(x.get("path", [])),
+            str(x.get("text", "")),
+        )
+    )
+    return rescored[:max(1, int(limit))]
+
+
+def patch_generation():
+    """Keep v0.7 grammar safeguards, then rerank wider beams by context."""
+    import generation
+
+    if getattr(generation, "_activation_patched", False):
+        return generation
+
+    original = generation.generate_sequence_sentences
+    generation.BEAM_WIDTH = max(int(getattr(generation, "BEAM_WIDTH", 6)), 12)
+
+    def generate_sequence_sentences(graph, seed, limit=3, max_words=None):
+        requested = max(1, int(limit))
+        expanded = max(12, requested * 4)
+        if max_words is None:
+            rows = original(graph, seed, limit=expanded)
+        else:
+            rows = original(graph, seed, limit=expanded, max_words=max_words)
+        return rerank_generated_paths(graph, seed, rows, limit=requested)
+
+    generation.generate_sequence_sentences = generate_sequence_sentences
+    generation._activation_patched = True
+    return generation
+
+
 def make_ask(core, original_ask):
     def ask(vault, question, limit=20, depth=2):
         result = original_ask(vault, question, limit=limit, depth=depth)
@@ -238,6 +323,7 @@ def make_status(core, original_status):
 
 
 def apply(core):
+    patch_generation()
     original_ask = core.ask
     original_status = core.status
     core.ask = make_ask(core, original_ask)
