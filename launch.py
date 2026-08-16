@@ -19,6 +19,7 @@ import wordmap_gpt2
 import event_guidance
 import visualizer
 import lexicon_notes
+import node_health
 
 # Order matters:
 # 1) basic graph cleanup
@@ -37,6 +38,7 @@ import lexicon_notes
 # 14) event-guided context/start-node correction + direct event retrieval
 # 15) layered visual debugger trace + graph snapshot API
 # 16) expose lexicon + grammar metadata in Obsidian notes
+# 17) node health/orphan analyzer: real/weak/visual/tag-filter isolation diagnosis
 cleaning.apply(core)
 corpus_filter.apply(core)
 language.apply(core)
@@ -55,15 +57,18 @@ wordmap_gpt2.apply(core)
 event_guidance.apply(core)
 visualizer.apply(core)
 lexicon_notes.apply(core)
+node_health.apply(core)
 
 import wordmap_mobile
 import ui_patch
 import corpus_web
 import visual_ui
+import node_health_web
 
 ui_patch.apply(wordmap_mobile)
 corpus_web.apply(wordmap_mobile, core)
 visual_ui.apply(wordmap_mobile)
+node_health_web.apply(wordmap_mobile, core)
 
 if __name__ == "__main__":
     wordmap_mobile.main()
