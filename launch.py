@@ -14,6 +14,7 @@ import syntax_tags
 import syntax_bridge
 import activation
 import wordmap_gpt2
+import visualizer
 import lexicon_notes
 
 # Order matters:
@@ -28,7 +29,8 @@ import lexicon_notes
 # 9) bridge graph-less grammar words back into generation pattern checks
 # 10) dynamic context activation
 # 11) WordMap GPT-2 autoregressive generation with expanded candidates
-# 12) expose lexicon + grammar metadata in Obsidian notes
+# 12) layered visual debugger trace + graph snapshot API
+# 13) expose lexicon + grammar metadata in Obsidian notes
 cleaning.apply(core)
 corpus_filter.apply(core)
 language.apply(core)
@@ -42,6 +44,7 @@ syntax_tags.apply(core)
 syntax_bridge.apply(syntax_tags)
 activation.apply(core)
 wordmap_gpt2.apply(core)
+visualizer.apply(core)
 lexicon_notes.apply(core)
 
 import wordmap_mobile
