@@ -8,6 +8,7 @@ import hybrid
 import sequence
 import generation
 import syntax_tags
+import activation
 import lexicon_notes
 
 # Order matters:
@@ -18,7 +19,8 @@ import lexicon_notes
 # 5) ordered next-word statistics from real sentence order
 # 6) corpus-grounded sentence generation + semantic realization
 # 7) Korean grammar tags, sentence-role patterns, question-intent filtering
-# 8) expose lexicon + grammar metadata in Obsidian notes
+# 8) dynamic context activation and GPT-2-inspired candidate reranking
+# 9) expose lexicon + grammar metadata in Obsidian notes
 cleaning.apply(core)
 language.apply(core)
 relations.apply(core)
@@ -26,6 +28,7 @@ hybrid.apply(core, relations)
 sequence.apply(core)
 generation.apply(core)
 syntax_tags.apply(core)
+activation.apply(core)
 lexicon_notes.apply(core)
 
 import wordmap_mobile
