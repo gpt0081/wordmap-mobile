@@ -43,7 +43,7 @@ if python -m py_compile \
   corpus_v1.py corpus_v1_quality.py corpus_integrity.py \
   relations.py relation_guard.py hybrid.py sequence.py generation.py generation_tokens.py \
   syntax_tags.py syntax_bridge.py event_graph.py temporal_event.py activation.py context_map.py \
-  wordmap_gpt2.py event_guidance.py dialogue_session.py visualizer.py lexicon_notes.py node_health.py \
+  wordmap_gpt2.py event_guidance.py dialogue_session.py dialogue_corpus.py visualizer.py lexicon_notes.py node_health.py \
   credit_learning.py experiment_harness.py \
   ui_patch.py corpus_web.py visual_ui.py node_health_web.py learning_web.py experiment_web.py benchmark.py \
   selftest.py selftest_gpt2.py selftest_v010.py selftest_v012.py selftest_v013.py selftest_v014.py selftest_v015.py selftest_v016.py selftest_visualizer.py \
@@ -61,7 +61,7 @@ if python -m py_compile \
   echo "[WordMap] 업데이트 완료: $OLD_VERSION -> $NEW_VERSION"
   echo "[WordMap] v0.16 Corpus v1 Experiment Harness가 추가되었습니다."
   echo "[WordMap] TRAIN 1,500 / DEV 60 / TEST 110 역할 분리와 평가파일 학습 차단이 적용됩니다."
-  echo "[WordMap] Dialogue Session, 시간/소유자 사건문맥, 무결성·누출 검사, 자동 Benchmark가 추가되었습니다."
+  echo "[WordMap] Dialogue Session과 세션학습지도, 시간/소유자 사건문맥, 무결성·누출 검사, 자동 Benchmark가 추가되었습니다."
   echo "[WordMap] Credit Backprop B0/B1/B2/B3 비교와 Target/Non-target/Regression/Transfer 측정을 지원합니다."
   echo "[WordMap] 코드 업데이트만으로 기존 Corpus를 삭제하지 않습니다. 웹의 'Corpus v1 설치 / 교체'를 눌러 백업 후 교체하세요."
   echo "[WordMap] 서버가 실행 중이었다면 Ctrl+C 후 bash start.sh 로 다시 실행하세요."
