@@ -1,6 +1,5 @@
 from __future__ import annotations
 
-import itertools
 import json
 import re
 from collections import Counter
@@ -11,6 +10,13 @@ SIMILARITY_THRESHOLD = 0.86
 MAX_EXAMPLES = 60
 TIME_WORDS = ("아침", "오전", "점심", "오후", "저녁", "밤", "어제", "오늘", "현재", "지금", "처음", "이후", "다음")
 TRANSIENT_OBJECTS = {"사과", "책", "열쇠", "공", "우산", "컵", "공책", "가방", "연필", "신발"}
+TRANSIENT_PATTERN = "|".join(re.escape(x) for x in sorted(TRANSIENT_OBJECTS, key=len, reverse=True))
+LOCATION_STATE_RE = re.compile(
+    rf"(?:{TRANSIENT_PATTERN})(?:은|는|이|가)\s+"
+    r".{0,35}?"
+    r"(?:위|아래|안|밖|옆|앞|뒤)?에\s+"
+    r"(?:있다|있었다|놓여\s*있다|보관되어\s*있다)"
+)
 POLYSEMY_GROUPS = {
     "배": ["과일", "선박", "신체", "복부", "항구", "바다"],
     "눈": ["시각", "사물", "눈송이", "겨울", "쌓"],
@@ -135,11 +141,12 @@ def _repeat_warnings(train):
 def _temporal_warnings(train):
     found = []
     for source, text in train:
-        if not any(obj in text for obj in TRANSIENT_OBJECTS):
+        if not LOCATION_STATE_RE.search(text):
             continue
-        if not re.search(r"(?:에|위|아래|안|옆).{0,10}(?:있다|있었다|놓여 있다|보관되어 있다)", text):
-            continue
-        if not any(word in text for word in TIME_WORDS) and not any(x in text for x in ("평소", "보관", "정리된 상태")):
+        has_context = any(word in text for word in TIME_WORDS) or any(
+            x in text for x in ("평소", "보관", "정리된 상태", "기본 보관", "보관 위치")
+        )
+        if not has_context:
             found.append({"source": source, "text": text})
             if len(found) >= MAX_EXAMPLES:
                 break
@@ -153,8 +160,7 @@ def _polysemy_bridge_warnings(train):
             if word not in text:
                 continue
             hits = [m for m in markers if m in text]
-            # Three or more cross-domain markers in one sentence is usually an explicit sense bridge.
-            if len(hits) >= 3 and ("다른 뜻" in text or "의미" in text and "와" in text):
+            if len(hits) >= 3 and ("다른 뜻" in text or ("의미" in text and "와" in text)):
                 found.append({"source": source, "word": word, "markers": hits, "text": text})
                 break
         if len(found) >= MAX_EXAMPLES:
