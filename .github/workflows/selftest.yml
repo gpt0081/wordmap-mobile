@@ -1,0 +1,29 @@
+name: WordMap self-test
+
+on:
+  push:
+    branches: [main]
+  workflow_dispatch:
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - name: Compile
+        run: |
+          python -m py_compile *.py
+      - name: Core tests
+        run: |
+          python selftest.py
+          python selftest_gpt2.py
+          python selftest_v010.py
+          python selftest_v012.py
+          python selftest_v013.py
+          python selftest_v014.py
+          python selftest_v015.py
+          python selftest_v016.py
+          python selftest_visualizer.py
