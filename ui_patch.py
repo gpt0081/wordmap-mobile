@@ -26,6 +26,25 @@ window.askQ = async function(){
         +'</div>';
     }
 
+    let situation=d['상황문맥']||{};
+    let event=situation['사건']||null;
+    let situationHtml='';
+    if(event){
+      let roles=event['역할']||{};
+      let roleLines=Object.keys(roles).map(k=>'<div class="meta" style="margin-top:5px"><b>'+esc(k)+'</b>: '+(roles[k]||[]).map(esc).join(', ')+'</div>').join('');
+      let answer=d['상황답변']||null;
+      situationHtml='<div class="result"><div class="token">상황 / 사건 분석</div>'
+        +'<div class="meta" style="margin-top:7px">입력 유형: '+esc(situation['입력유형']||'')
+        +' · 사건: <b>'+esc(event['서술어']||'')+'</b>'
+        +(situation['요청역할']?' · 찾는 역할: <b>'+esc(situation['요청역할'])+'</b>':'')+'</div>'
+        +roleLines
+        +'<div class="meta" style="margin-top:5px">사건 프레임: '+esc(event['프레임']||'')+'</div>'
+        +(answer?'<div style="margin-top:9px"><b>사건지도 직접 답변</b><div class="meta">'
+          +esc(answer['역할']||'')+' = '+(answer['값']||[]).map(esc).join(', ')
+          +' · 근거 '+Number(answer['근거수']||1)+'회</div></div>':'')
+        +'</div>';
+    }
+
     let analysis=(d.surface_analysis||[]);
     let recovered=analysis.filter(x=>x.compound||x.query_fallback);
     let analysisHtml='';
@@ -56,7 +75,7 @@ window.askQ = async function(){
     if(generated.length){
       generatedHtml='<div class="result"><div class="token">생성 문장 후보</div>'
         +generated.map((x,i)=>{
-          let mode=x.mode==='semantic'?'의미관계 기반':(x.mode==='wordmap_gpt2'?'단어지도 GPT-2식':'말뭉치 순서 기반');
+          let mode=x.mode==='event'?'상황/사건 지도 직접 조회':(x.mode==='semantic'?'의미관계 기반':(x.mode==='wordmap_gpt2'?'단어지도 GPT-2식':'말뭉치 순서 기반'));
           let path=(x.path||[]).map(esc).join(' → ');
           let pattern=x.grammar_pattern||'';
           let patternCount=Number(x.grammar_pattern_count||0);
@@ -68,6 +87,7 @@ window.askQ = async function(){
               +esc(pattern)+(patternCount?' · 관찰 '+patternCount+'회':'')+'</div>':'')
             +(activeSupport?'<div class="meta" style="margin-top:3px">문맥 지지도: '
               +activeSupport.toFixed(3)+'</div>':'')
+            +(x.mode==='event'?'<div class="meta" style="margin-top:3px">질문 역할: '+esc(x.event_role||'')+' · 값 '+(x.event_values||[]).map(esc).join(', ')+'</div>':'')
             +'</div>';
         }).join('')
         +'</div>';
@@ -128,20 +148,23 @@ window.askQ = async function(){
         +'</div>';
     }
 
+    let contextSeeds=d.context_seed_tokens||[];
     box.innerHTML=
       '<div class="meta">생성 모델: '+esc(d['생성모델']||'기본')
       +(d.normalized_question&&d.normalized_question!==d.question?'<br>내부 질문: '+esc(d.normalized_question):'')
-      +'<br>질문 토큰: '+d.query_tokens.map(esc).join(', ')
-      +'<br>시작 노드: '+d.seed_tokens.map(esc).join(', ')+'</div>'
+      +'<br>질문 토큰: '+(d.query_tokens||[]).map(esc).join(', ')
+      +'<br>시작 노드: '+(d.seed_tokens||[]).map(esc).join(', ')
+      +(contextSeeds.length?'<br>상황 문맥 노드: '+contextSeeds.map(esc).join(', '):'')+'</div>'
       +(d.warning?'<div class="warn">'+esc(d.warning)+'</div>':'')
       +questionHtml
+      +situationHtml
       +analysisHtml
       +generatedHtml
       +traceHtml
       +activeHtml
       +nextHtml
       +semanticHtml
-      +d.results.map((x,i)=>
+      +(d.results||[]).map((x,i)=>
         '<div class="result"><div class="token">'+(i+1)+'. '+esc(x.token)
         +'</div><div class="meta">score '+x.score+' · 빈도 '+x.frequency
         +'</div></div>'
