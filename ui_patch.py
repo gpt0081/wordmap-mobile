@@ -26,6 +26,18 @@ window.askQ = async function(){
         +'</div>';
     }
 
+    let analysis=(d.surface_analysis||[]);
+    let recovered=analysis.filter(x=>x.compound||x.query_fallback);
+    let analysisHtml='';
+    if(recovered.length){
+      analysisHtml='<div class="result"><div class="token">입력 해석</div>'
+        +recovered.map(x=>'<div class="meta" style="margin-top:7px">'
+          +esc(x.surface)+' → '+(x.lemmas||[]).map(esc).join(' + ')
+          +(x.query_fallback?' · 미등록 표현에서 알려진 개념 복구':'')
+          +'</div>').join('')
+        +'</div>';
+    }
+
     let active=(d['문맥활성화']||[]);
     let activeHtml='';
     if(active.length){
@@ -36,17 +48,6 @@ window.askQ = async function(){
             +'<div class="meta">활성도 '+Number(x['활성도']||0).toFixed(3)
             +(why?' · '+why:'')+'</div></div>';
         }).join('')
-        +'</div>';
-    }
-
-    let analysis=(d.surface_analysis||[]);
-    let analysisHtml='';
-    let compounds=analysis.filter(x=>x.compound);
-    if(compounds.length){
-      analysisHtml='<div class="result"><div class="token">입력 분해</div>'
-        +compounds.map(x=>'<div class="meta" style="margin-top:7px">'
-          +esc(x.surface)+' → '+x.lemmas.map(esc).join(' + ')
-          +'</div>').join('')
         +'</div>';
     }
 
@@ -63,7 +64,7 @@ window.askQ = async function(){
           return '<div style="margin-top:13px"><b>'+(i+1)+'. '+esc(x.text)+'</b>'
             +'<div class="meta" style="margin-top:4px">'+mode
             +(path?' · 경로 '+path:'')+'</div>'
-            +(pattern?'<div class="meta" style="margin-top:3px">문법 패턴: '
+            +(pattern?'<div class="meta" style="margin-top:3px">정규 문법 패턴: '
               +esc(pattern)+(patternCount?' · 관찰 '+patternCount+'회':'')+'</div>':'')
             +(activeSupport?'<div class="meta" style="margin-top:3px">문맥 지지도: '
               +activeSupport.toFixed(3)+'</div>':'')
@@ -79,18 +80,23 @@ window.askQ = async function(){
         +trace.map((step,i)=>{
           let context=(step['이전문맥']||[]).map(esc).join(' → ');
           let chosen=esc(step['선택표면형']||step['선택']||'');
-          let candidates=(step['후보상위']||[]).slice(0,3).map(c=>{
+          let chosenOrigin=(step['선택후보출처']||[]).map(esc).join(', ');
+          let candidates=(step['후보상위']||[]).slice(0,4).map(c=>{
+            let origins=(c['후보출처']||[]).map(esc).join('/');
+            let prior=Number(c['순서/사전확률']||c['순서확률']||0);
             return esc(c['표면형']||c['표제어']||'')
               +' '+(Number(c['선택확률']||0)*100).toFixed(1)+'%'
-              +' [순서 '+Number(c['순서확률']||0).toFixed(2)
+              +' [사전 '+prior.toFixed(2)
               +' · 문맥 '+Number(c['문맥활성']||0).toFixed(2)
-              +' · 문법 '+Number(c['문법적합']||0).toFixed(2)+']';
+              +' · 문법 '+Number(c['문법적합']||0).toFixed(2)
+              +(origins?' · '+origins:'')+']';
           }).join('<br>');
           return '<div style="margin-top:12px"><b>'+(i+1)+'. '+(context?context+' → ':'')+chosen+'</b>'
             +'<div class="meta" style="margin-top:4px">선택 확률 '
             +(Number(step['선택확률']||0)*100).toFixed(1)+'% · 문맥활성 '
             +Number(step['선택문맥활성']||0).toFixed(3)+' · 문법적합 '
-            +Number(step['선택문법적합']||0).toFixed(3)+'</div>'
+            +Number(step['선택문법적합']||0).toFixed(3)
+            +(chosenOrigin?' · 출처 '+chosenOrigin:'')+'</div>'
             +(candidates?'<div class="meta" style="margin-top:5px">후보<br>'+candidates+'</div>':'')
             +'</div>';
         }).join('')
@@ -124,6 +130,7 @@ window.askQ = async function(){
 
     box.innerHTML=
       '<div class="meta">생성 모델: '+esc(d['생성모델']||'기본')
+      +(d.normalized_question&&d.normalized_question!==d.question?'<br>내부 질문: '+esc(d.normalized_question):'')
       +'<br>질문 토큰: '+d.query_tokens.map(esc).join(', ')
       +'<br>시작 노드: '+d.seed_tokens.map(esc).join(', ')+'</div>'
       +(d.warning?'<div class="warn">'+esc(d.warning)+'</div>':'')
