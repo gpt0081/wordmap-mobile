@@ -56,7 +56,8 @@ if python -m py_compile \
   && python selftest_v014.py \
   && python selftest_v015.py \
   && python selftest_v016.py \
-  && python selftest_visualizer.py; then
+  && python selftest_visualizer.py \
+  && python -c "import launch; print('[WordMap] v0.16 runtime wiring: OK')"; then
   NEW_VERSION="$(cat VERSION 2>/dev/null || echo unknown)"
   echo "[WordMap] 업데이트 완료: $OLD_VERSION -> $NEW_VERSION"
   echo "[WordMap] v0.16 Corpus v1 Experiment Harness가 추가되었습니다."
