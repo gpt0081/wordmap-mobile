@@ -3,10 +3,10 @@ from __future__ import annotations
 import math
 from collections import defaultdict
 
-VERSION = "0.11.0"
-DEFAULT_LIMIT = 160
-MAX_ASSOC_EDGES = 360
-MAX_SEQUENCE_EDGES = 260
+VERSION = "0.11.1"
+DEFAULT_LIMIT = 120
+MAX_ASSOC_EDGES = 280
+MAX_SEQUENCE_EDGES = 180
 
 
 def _relations(graph):
@@ -30,10 +30,18 @@ def _node_score(meta):
     return math.log1p(freq)
 
 
-def _select_nodes(graph, focus=None, active=None, generation_path=None, limit=DEFAULT_LIMIT):
+def _select_nodes(
+    graph,
+    focus=None,
+    active=None,
+    generation_path=None,
+    candidate_tokens=None,
+    limit=DEFAULT_LIMIT,
+):
     nodes = graph.get("nodes", {}) or {}
     focus = [x for x in (focus or []) if x]
     generation_path = [x for x in (generation_path or []) if x]
+    candidate_tokens = [x for x in (candidate_tokens or []) if x]
     active = active or []
 
     scores = defaultdict(float)
@@ -44,30 +52,34 @@ def _select_nodes(graph, focus=None, active=None, generation_path=None, limit=DE
         scores[token] += 100.0
     for token in generation_path:
         scores[token] += 90.0
+    for token in candidate_tokens:
+        scores[token] += 58.0
     for row in active:
         token = row.get("표제어")
         if token:
             scores[token] += 60.0 * float(row.get("활성도", 0))
 
-    anchors = list(dict.fromkeys(focus + generation_path + [
-        row.get("표제어") for row in active[:18] if row.get("표제어")
-    ]))
+    anchors = list(dict.fromkeys(
+        focus
+        + generation_path
+        + [row.get("표제어") for row in active[:14] if row.get("표제어")]
+    ))
 
     for source in anchors:
         for target, meta in sorted(
             (graph.get("edges", {}).get(source, {}) or {}).items(),
             key=lambda x: -float((x[1] or {}).get("score", 0)),
-        )[:16]:
-            scores[target] += 18.0 * float((meta or {}).get("score", 0))
+        )[:12]:
+            scores[target] += 15.0 * float((meta or {}).get("score", 0))
 
     for rel in _relations(graph):
         source = rel.get("source")
         target = rel.get("target")
         confidence = float(rel.get("confidence", 0))
         if source in anchors and target:
-            scores[target] += 22.0 * confidence
+            scores[target] += 20.0 * confidence
         if target in anchors and source:
-            scores[source] += 8.0 * confidence
+            scores[source] += 7.0 * confidence
 
     bigrams = _generation_bigrams(graph)
     for source in anchors:
@@ -75,28 +87,41 @@ def _select_nodes(graph, focus=None, active=None, generation_path=None, limit=DE
         total = sum(max(0, int(v)) for v in row.values())
         if total <= 0:
             continue
-        for target, count in sorted(row.items(), key=lambda x: -int(x[1]))[:12]:
-            scores[target] += 14.0 * (int(count) / total)
+        for target, count in sorted(row.items(), key=lambda x: -int(x[1]))[:10]:
+            scores[target] += 12.0 * (int(count) / total)
 
     ranked = sorted(
         scores.items(),
-        key=lambda x: (-float(x[1]), -int(nodes.get(x[0], {}).get("frequency", 0)), x[0]),
+        key=lambda x: (
+            -float(x[1]),
+            -int(nodes.get(x[0], {}).get("frequency", 0)),
+            x[0],
+        ),
     )
     selected = [token for token, _score in ranked[:max(20, int(limit))]]
 
-    for token in focus + generation_path:
+    for token in focus + generation_path + candidate_tokens:
         if token and token not in selected:
             selected.append(token)
     return selected[:max(20, int(limit))]
 
 
-def graph_snapshot(core, vault, focus=None, active=None, generation_path=None, limit=DEFAULT_LIMIT):
+def graph_snapshot(
+    core,
+    vault,
+    focus=None,
+    active=None,
+    generation_path=None,
+    candidate_tokens=None,
+    limit=DEFAULT_LIMIT,
+):
     graph = core.load_graph(vault)
     selected = _select_nodes(
         graph,
         focus=focus,
         active=active,
         generation_path=generation_path,
+        candidate_tokens=candidate_tokens,
         limit=limit,
     )
     selected_set = set(selected)
@@ -107,6 +132,7 @@ def graph_snapshot(core, vault, focus=None, active=None, generation_path=None, l
     }
     focus_set = set(focus or [])
     generation_set = set(generation_path or [])
+    candidate_set = set(candidate_tokens or [])
 
     nodes = []
     for token in selected:
@@ -119,6 +145,7 @@ def graph_snapshot(core, vault, focus=None, active=None, generation_path=None, l
             "activation": round(float(active_map.get(token, 0)), 4),
             "focus": token in focus_set,
             "generated": token in generation_set,
+            "candidate": token in candidate_set,
         })
 
     edges = []
@@ -197,7 +224,11 @@ def graph_snapshot(core, vault, focus=None, active=None, generation_path=None, l
         })
 
     grammar_data = graph.get("문법", {}) or {}
-    pattern_stats = grammar_data.get("정규패턴통계", {}) or grammar_data.get("패턴통계", {}) or {}
+    pattern_stats = (
+        grammar_data.get("정규패턴통계", {})
+        or grammar_data.get("패턴통계", {})
+        or {}
+    )
     top_patterns = sorted(
         pattern_stats.items(),
         key=lambda x: (-int(x[1]), x[0]),
@@ -224,6 +255,15 @@ def graph_snapshot(core, vault, focus=None, active=None, generation_path=None, l
     }
 
 
+def _candidate_ids(step):
+    out = []
+    for row in (step.get("후보상위") or [])[:5]:
+        token = row.get("표제어")
+        if token and token not in out:
+            out.append(token)
+    return out
+
+
 def build_visual_trace(result):
     seeds = list(result.get("seed_tokens") or result.get("query_tokens") or [])
     stages = [{
@@ -231,6 +271,7 @@ def build_visual_trace(result):
         "kind": "기본",
         "activation": {},
         "path": [],
+        "candidate_ids": [],
         "message": "Vault의 장기 WordMap을 표시합니다.",
     }]
 
@@ -240,6 +281,7 @@ def build_visual_trace(result):
             "kind": "입력",
             "activation": {token: 1.0 for token in seeds},
             "path": list(seeds),
+            "candidate_ids": [],
             "message": "질문에서 찾은 핵심 노드를 강조합니다.",
         })
 
@@ -254,6 +296,7 @@ def build_visual_trace(result):
                 if row.get("표제어")
             },
             "path": list(seeds),
+            "candidate_ids": [],
             "message": "연상·의미·순서 지도가 현재 문맥에서 활성화한 노드입니다.",
         })
 
@@ -279,6 +322,7 @@ def build_visual_trace(result):
             "grammar_fit": float(step.get("선택문법적합", 0)),
             "candidate_origins": list(step.get("선택후보출처") or []),
             "candidates": list(step.get("후보상위") or [])[:5],
+            "candidate_ids": _candidate_ids(step),
             "message": "현재 문맥을 다시 계산한 뒤 다음 단어를 선택한 단계입니다.",
         })
 
@@ -294,6 +338,7 @@ def build_visual_trace(result):
                 if row.get("표제어")
             },
             "path": list(top.get("path") or []),
+            "candidate_ids": [],
             "grammar_pattern": top.get("grammar_pattern"),
             "text": top.get("text"),
             "message": "선택된 생성 경로와 최종 문법 패턴입니다.",
@@ -315,12 +360,23 @@ def make_ask(core, original_ask):
             )
             path = list(preferred.get("path") or [])
 
+        candidate_tokens = []
+        for step in result.get("자동회귀생성과정") or []:
+            for token in _candidate_ids(step):
+                if token not in candidate_tokens:
+                    candidate_tokens.append(token)
+                if len(candidate_tokens) >= 16:
+                    break
+            if len(candidate_tokens) >= 16:
+                break
+
         result["visual_graph"] = graph_snapshot(
             core,
             vault,
             focus=result.get("seed_tokens") or result.get("query_tokens") or [],
             active=active,
             generation_path=path,
+            candidate_tokens=candidate_tokens,
             limit=DEFAULT_LIMIT,
         )
         result["시각화단계"] = build_visual_trace(result)
