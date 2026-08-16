@@ -26,6 +26,19 @@ window.askQ = async function(){
         +'</div>';
     }
 
+    let active=(d['문맥활성화']||[]);
+    let activeHtml='';
+    if(active.length){
+      activeHtml='<div class="result"><div class="token">현재 문맥 활성화</div>'
+        +active.slice(0,10).map((x,i)=>{
+          let why=(x['근거']||[]).slice(0,2).map(esc).join(' · ');
+          return '<div style="margin-top:8px"><b>'+(i+1)+'. '+esc(x['표제어']||'')+'</b>'
+            +'<div class="meta">활성도 '+Number(x['활성도']||0).toFixed(3)
+            +(why?' · '+why:'')+'</div></div>';
+        }).join('')
+        +'</div>';
+    }
+
     let analysis=(d.surface_analysis||[]);
     let analysisHtml='';
     let compounds=analysis.filter(x=>x.compound);
@@ -46,11 +59,14 @@ window.askQ = async function(){
           let path=(x.path||[]).map(esc).join(' → ');
           let pattern=x.grammar_pattern||'';
           let patternCount=Number(x.grammar_pattern_count||0);
+          let activeSupport=Number(x.activation_support||0);
           return '<div style="margin-top:13px"><b>'+(i+1)+'. '+esc(x.text)+'</b>'
             +'<div class="meta" style="margin-top:4px">'+mode
             +(path?' · 경로 '+path:'')+'</div>'
             +(pattern?'<div class="meta" style="margin-top:3px">문법 패턴: '
               +esc(pattern)+(patternCount?' · 관찰 '+patternCount+'회':'')+'</div>':'')
+            +(activeSupport?'<div class="meta" style="margin-top:3px">문맥 지지도: '
+              +activeSupport.toFixed(3)+'</div>':'')
             +'</div>';
         }).join('')
         +'</div>';
@@ -61,9 +77,13 @@ window.askQ = async function(){
     if(next.length){
       nextHtml='<div class="result"><div class="token">다음 단어 후보 · '
         +esc(d.next_word_source||'')+'</div>'
-        +next.map((x,i)=>'<div style="margin-top:9px"><b>'+(i+1)+'. '
-          +esc(x.token)+'</b><div class="meta">출현 '+Number(x.count||0)
-          +'회 · '+(Number(x.probability||0)*100).toFixed(1)+'%</div></div>').join('')
+        +next.map((x,i)=>{
+          let activeScore=Number(x.activation||0);
+          return '<div style="margin-top:9px"><b>'+(i+1)+'. '
+            +esc(x.token)+'</b><div class="meta">출현 '+Number(x.count||0)
+            +'회 · 기본 '+(Number(x.probability||0)*100).toFixed(1)+'%'
+            +(activeScore?' · 문맥활성 '+activeScore.toFixed(3):'')+'</div></div>';
+        }).join('')
         +'</div>';
     }
 
@@ -82,6 +102,7 @@ window.askQ = async function(){
       +'<br>시작 노드: '+d.seed_tokens.map(esc).join(', ')+'</div>'
       +(d.warning?'<div class="warn">'+esc(d.warning)+'</div>':'')
       +questionHtml
+      +activeHtml
       +analysisHtml
       +generatedHtml
       +nextHtml
