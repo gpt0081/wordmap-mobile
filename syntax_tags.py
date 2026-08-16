@@ -1,17 +1,16 @@
 from __future__ import annotations
 
-from collections import Counter
-
 import grammar
 import language
 
-VERSION = "0.7.0"
+VERSION = "0.10.0"
 
 POS_KO = {
     "noun": "명사",
     "verb": "동사",
     "adjective": "형용사",
     "adverb": "부사",
+    "determiner": "관형사",
     "proper": "고유명사",
     "unknown": "미분류",
 }
@@ -33,24 +32,50 @@ QUESTION_INTENTS = (
 
 TERMINAL_ENDINGS = (
     "다", "요", "니다", "습니다", "한다", "된다", "했다", "됐다",
-    "이다", "입니다", "였다", "이었다", "한다", "된다", "준다",
+    "이다", "입니다", "였다", "이었다", "준다", "먹는다", "읽는다",
 )
 ADNOMINAL_ENDINGS = ("는", "은", "ㄴ", "을", "ㄹ", "던", "한", "적인")
+COPULA_SUFFIXES = ("이다", "입니다", "였다", "이었다")
+
+NORMAL_ROLE_MAP = {
+    "관형어": "수식어",
+    "체언": "보어",
+    "접속어": "연결",
+    "주어": "주어",
+    "목적어": "목적어",
+    "부사어": "부사어",
+    "서술어": "서술어",
+    "보어": "보어",
+    "독립어": "독립어",
+}
 
 
 def _ensure(graph):
     data = graph.setdefault("문법", {})
     data.setdefault("버전", VERSION)
     data.setdefault("문장수", 0)
+    data.setdefault("토큰수", 0)
+    data.setdefault("미분류토큰수", 0)
     data.setdefault("패턴통계", {})
     data.setdefault("패턴예문", {})
+    data.setdefault("정규패턴통계", {})
+    data.setdefault("정규패턴예문", {})
     data.setdefault("표제어역할", {})
     data.setdefault("문장분석", [])
     return data
 
 
+def _copula_suffix(surface, lemma):
+    if not surface or not lemma or not surface.startswith(lemma):
+        return None
+    suffix = surface[len(lemma):]
+    return suffix if suffix in COPULA_SUFFIXES else None
+
+
 def _particle_from_surface(surface, lemma):
     if not surface or not lemma:
+        return None
+    if _copula_suffix(surface, lemma):
         return None
     if surface.startswith(lemma):
         suffix = surface[len(lemma):]
@@ -70,6 +95,12 @@ def _adnominal(surface, pos):
 
 
 def _preliminary_role(surface, lemma, pos, particle):
+    copula = _copula_suffix(surface, lemma)
+    if copula:
+        return "서술어", "정의/서술명사", "종결어미"
+
+    if pos == "determiner":
+        return "관형어", "수식", None
     if pos == "adverb":
         return "부사어", None, None
 
@@ -114,6 +145,8 @@ def _entry_token(surface, entry):
         "품사": pos_ko,
         "품사코드": pos,
         "문장역할": role,
+        "분석신뢰": round(float(entry.get("confidence", 0)), 3),
+        "분석근거": entry.get("reason") or entry.get("reasons") or "",
     }
     if semantic:
         token["의미역할"] = semantic
@@ -131,12 +164,12 @@ def _unknown_token(surface):
         "품사": "미분류",
         "품사코드": "unknown",
         "문장역할": "미분류",
+        "분석신뢰": 0.0,
     }
 
 
 def _refine_roles(tokens):
-    # Bare nouns before another noun act as noun modifiers in many Korean noun
-    # phrases: '고무 물성', '재고 관리', '우주 탐사'.
+    # Bare nouns before another noun are usually noun modifiers in compounds.
     for i, token in enumerate(tokens[:-1]):
         if token.get("문장역할") != "체언":
             continue
@@ -144,13 +177,32 @@ def _refine_roles(tokens):
             continue
         nxt = tokens[i + 1]
         if nxt.get("품사코드") in {"noun", "proper", "unknown"} and nxt.get("문장역할") in {
-            "체언", "주어", "목적어", "부사어"
+            "체언", "주어", "목적어", "부사어", "서술어"
         }:
             token["문장역할"] = "관형어"
             token["의미역할"] = "명사수식"
 
+    # If a second topic-marked token appears after an established subject and
+    # directly modifies a following noun/predicate noun, prefer an adnominal
+    # reading. This repairs common heuristic errors such as 살아가는 -> 살아가+는.
+    seen_subject = False
+    for i, token in enumerate(tokens):
+        if token.get("문장역할") != "주어":
+            continue
+        if not seen_subject:
+            seen_subject = True
+            continue
+        if token.get("조사") not in {"은", "는"} or i + 1 >= len(tokens):
+            continue
+        nxt = tokens[i + 1]
+        if nxt.get("문장역할") in {"체언", "서술어"}:
+            token["문장역할"] = "관형어"
+            token["의미역할"] = "용언수식추정"
+            token["문법형태"] = "관형형추정"
+            token.pop("조사", None)
+
     # If there is no explicit subject, a sentence-initial bare noun followed by
-    # a predicate is a useful conservative subject candidate.
+    # a predicate is a conservative subject candidate.
     has_subject = any(t.get("문장역할") == "주어" for t in tokens)
     if not has_subject and tokens:
         first = tokens[0]
@@ -180,30 +232,30 @@ def _refine_roles(tokens):
 
 
 def analyze_sentence(sentence, resolver=None):
-    resolver = resolver or language.resolve_surface
+    resolver = resolver or language.resolve_surface_for_grammar
     tokens = []
 
     for surface in grammar.raw_words(sentence):
         entries = resolver(surface) or []
         if not entries:
+            fallback = grammar.syntax_fallback(surface)
+            entries = fallback or []
+        if not entries:
             tokens.append(_unknown_token(surface))
             continue
 
-        if len(entries) == 1:
-            tokens.append(_entry_token(surface, entries[0]))
-            continue
-
-        # Fused compound components have no trustworthy internal particle
-        # boundary. Keep each component as a bare lexeme.
-        for entry in entries:
-            lemma = str(entry.get("lemma", ""))
-            tokens.append(_entry_token(lemma, entry))
+        # The highest ranked syntax analysis is used for sentence roles. The
+        # alternatives remain in the Lexicon and can be revisited later.
+        entry = entries[0]
+        tokens.append(_entry_token(surface, entry))
 
     _refine_roles(tokens)
-    pattern = pattern_from_tokens(tokens)
+    raw_pattern = raw_pattern_from_tokens(tokens)
+    normalized = normalized_pattern_from_tokens(tokens)
     return {
         "문장": sentence.strip(),
-        "패턴": pattern,
+        "패턴": raw_pattern,
+        "정규패턴": normalized,
         "토큰": tokens,
     }
 
@@ -214,8 +266,6 @@ def _pattern_roles(tokens):
         for token in tokens
         if token.get("문장역할") not in {None, "", "미분류"}
     ]
-    # Repeated modifiers/adverbials are grouped into one structural slot. The
-    # full token list is still retained in 문장분석.
     compact = []
     for role in roles:
         if not compact or compact[-1] != role:
@@ -223,45 +273,90 @@ def _pattern_roles(tokens):
     return compact
 
 
-def pattern_from_tokens(tokens):
+def raw_pattern_from_tokens(tokens):
     roles = _pattern_roles(tokens)
     return " → ".join(roles) if roles else "미분류"
+
+
+def normalized_pattern_from_tokens(tokens):
+    roles = []
+    for role in _pattern_roles(tokens):
+        normalized = NORMAL_ROLE_MAP.get(role)
+        if not normalized:
+            continue
+        if roles and roles[-1] == normalized:
+            continue
+        roles.append(normalized)
+
+    while roles and roles[0] == "연결":
+        roles.pop(0)
+    while roles and roles[-1] == "연결":
+        roles.pop()
+
+    return " → ".join(roles) if roles else "미분류"
+
+
+def pattern_from_tokens(tokens):
+    """Compatibility alias: generation uses normalized structural patterns."""
+    return normalized_pattern_from_tokens(tokens)
+
+
+def raw_pattern_from_aligned(graph, path, surfaces):
+    tokens = []
+    for lemma, surface in zip(path, surfaces):
+        pos = str(graph.get("nodes", {}).get(lemma, {}).get("pos", "unknown"))
+        entry = {"lemma": lemma, "pos": pos, "confidence": 0.5}
+        tokens.append(_entry_token(surface, entry))
+    _refine_roles(tokens)
+    return raw_pattern_from_tokens(tokens)
 
 
 def pattern_from_aligned(graph, path, surfaces):
     tokens = []
     for lemma, surface in zip(path, surfaces):
         pos = str(graph.get("nodes", {}).get(lemma, {}).get("pos", "unknown"))
-        entry = {"lemma": lemma, "pos": pos}
+        entry = {"lemma": lemma, "pos": pos, "confidence": 0.5}
         tokens.append(_entry_token(surface, entry))
     _refine_roles(tokens)
-    return pattern_from_tokens(tokens)
+    return normalized_pattern_from_tokens(tokens)
 
 
 def pattern_count(graph, pattern):
-    return int(
-        graph.get("문법", {})
-        .get("패턴통계", {})
-        .get(pattern, 0)
-    )
+    data = graph.get("문법", {})
+    normalized = data.get("정규패턴통계", {})
+    if pattern in normalized:
+        return int(normalized.get(pattern, 0))
+    return int(data.get("패턴통계", {}).get(pattern, 0))
 
 
 def accumulate_syntax(graph, analysis):
     data = _ensure(graph)
-    pattern = analysis.get("패턴", "미분류")
+    raw_pattern = analysis.get("패턴", "미분류")
+    normalized = analysis.get("정규패턴", raw_pattern)
+    tokens = analysis.get("토큰", [])
+
     data["문장수"] = int(data.get("문장수", 0)) + 1
+    data["토큰수"] = int(data.get("토큰수", 0)) + len(tokens)
+    data["미분류토큰수"] = int(data.get("미분류토큰수", 0)) + sum(
+        1 for token in tokens if token.get("품사코드") == "unknown" or token.get("문장역할") == "미분류"
+    )
     data["버전"] = VERSION
 
-    stats = data["패턴통계"]
-    stats[pattern] = int(stats.get(pattern, 0)) + 1
+    raw_stats = data["패턴통계"]
+    raw_stats[raw_pattern] = int(raw_stats.get(raw_pattern, 0)) + 1
+    normal_stats = data["정규패턴통계"]
+    normal_stats[normalized] = int(normal_stats.get(normalized, 0)) + 1
 
-    examples = data["패턴예문"].setdefault(pattern, [])
     sentence = analysis.get("문장", "")
-    if sentence and sentence not in examples and len(examples) < 5:
-        examples.append(sentence)
+    raw_examples = data["패턴예문"].setdefault(raw_pattern, [])
+    if sentence and sentence not in raw_examples and len(raw_examples) < 3:
+        raw_examples.append(sentence)
+    normal_examples = data["정규패턴예문"].setdefault(normalized, [])
+    if sentence and sentence not in normal_examples and len(normal_examples) < 5:
+        normal_examples.append(sentence)
 
     roles = data["표제어역할"]
-    for token in analysis.get("토큰", []):
+    for token in tokens:
         lemma = token.get("표제어")
         role = token.get("문장역할")
         if not lemma or not role or role == "미분류":
@@ -269,8 +364,9 @@ def accumulate_syntax(graph, analysis):
         row = roles.setdefault(lemma, {})
         row[role] = int(row.get(role, 0)) + 1
 
-    # Preserve sentence-level tags for inspection and future pattern learning.
-    data["문장분석"].append(analysis)
+    analyses = data["문장분석"]
+    if len(analyses) < 10000:
+        analyses.append(analysis)
 
 
 def make_analyze(core, original_analyze):
@@ -335,9 +431,13 @@ def make_status(core, original_status):
             return out
         graph = core.load_graph(vault)
         data = graph.get("문법", {})
+        token_count = int(data.get("토큰수", 0))
+        unknown = int(data.get("미분류토큰수", 0))
         out["grammar_tag_version"] = data.get("버전", VERSION)
         out["grammar_sentences"] = int(data.get("문장수", 0))
-        out["grammar_patterns"] = len(data.get("패턴통계", {}))
+        out["grammar_raw_patterns"] = len(data.get("패턴통계", {}))
+        out["grammar_patterns"] = len(data.get("정규패턴통계", {}))
+        out["grammar_unknown_ratio"] = round((unknown / token_count), 4) if token_count else 0.0
         return out
     return status
 
