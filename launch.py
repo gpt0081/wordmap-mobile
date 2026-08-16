@@ -49,8 +49,10 @@ lexicon_notes.apply(core)
 
 import wordmap_mobile
 import ui_patch
+import visual_ui
 
 ui_patch.apply(wordmap_mobile)
+visual_ui.apply(wordmap_mobile)
 
 if __name__ == "__main__":
     wordmap_mobile.main()
