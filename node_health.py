@@ -44,22 +44,21 @@ def _tag_safe(value):
 
 
 def _all_tokens(graph):
+    """Return nodes that can actually appear as WordMap/semantic graph nodes.
+
+    Grammar-only generation tokens are intentionally not promoted into health
+    rows merely because they occur in sequence statistics.
+    """
     tokens = set((graph.get("nodes", {}) or {}).keys())
+    for source, neighbors in (graph.get("edges", {}) or {}).items():
+        if source:
+            tokens.add(source)
+        tokens.update(x for x in (neighbors or {}) if x)
     for rel in _relations(graph):
         if rel.get("source"):
             tokens.add(rel["source"])
         if rel.get("target"):
             tokens.add(rel["target"])
-    for source, targets in _bigrams(graph).items():
-        if source:
-            tokens.add(source)
-        tokens.update(x for x in (targets or {}) if x)
-    for event in _events(graph):
-        predicate = event.get("서술어")
-        if predicate:
-            tokens.add(predicate)
-        for values in (event.get("역할", {}) or {}).values():
-            tokens.update(x for x in (values or []) if x)
     return tokens
 
 
@@ -87,12 +86,11 @@ def _protected_token(token, meta):
         return True
     if re.search(r"[A-Za-z]", str(token)) and str(token).upper() == str(token):
         return True
-    domain = {
+    return low in {
         "mbts", "sbr", "nbr", "hnbr", "epdm", "br", "cr", "ir", "erp",
         "llm", "rag", "ocr", "api", "gpu", "cpu", "ai", "ml", "json",
         "csv", "pvi", "zno", "doa", "totm", "tespt",
     }
-    return low in domain
 
 
 def _indices(graph, tokens):
@@ -101,36 +99,41 @@ def _indices(graph, tokens):
     sequence = defaultdict(set)
     event_links = defaultdict(set)
     raw_pairs = defaultdict(set)
+    token_set = set(tokens)
 
     for source, neighbors in (graph.get("edges", {}) or {}).items():
+        if source not in token_set:
+            continue
         for target in (neighbors or {}):
-            if not source or not target or source == target:
+            if target not in token_set or source == target:
                 continue
             association[source].add(target)
             association[target].add(source)
 
     for rel in _relations(graph):
         source, target = rel.get("source"), rel.get("target")
-        if not source or not target or source == target:
+        if source not in token_set or target not in token_set or source == target:
             continue
         semantic[source].add(target)
         semantic[target].add(source)
 
     for source, targets in _bigrams(graph).items():
+        if source not in token_set:
+            continue
         for target, count in (targets or {}).items():
-            if not source or not target or source == target or int(count or 0) <= 0:
+            if target not in token_set or source == target or int(count or 0) <= 0:
                 continue
             sequence[source].add(target)
             sequence[target].add(source)
 
     for i, event in enumerate(_events(graph)):
         event_id = str(event.get("id") or f"event:{i}")
-        predicate = event.get("서술어")
         participants = set()
-        if predicate:
+        predicate = event.get("서술어")
+        if predicate in token_set:
             participants.add(predicate)
         for values in (event.get("역할", {}) or {}).values():
-            participants.update(x for x in (values or []) if x)
+            participants.update(x for x in (values or []) if x in token_set)
         for token in participants:
             event_links[token].add(event_id)
 
@@ -139,7 +142,9 @@ def _indices(graph, tokens):
             source, target = str(key).split(PAIR_SEP, 1)
         except ValueError:
             continue
-        if not source or not target or source == target or float(value or 0) <= 0:
+        if source not in token_set or target not in token_set or source == target:
+            continue
+        if float(value or 0) <= 0:
             continue
         raw_pairs[source].add(target)
         raw_pairs[target].add(source)
@@ -152,12 +157,11 @@ def _indices(graph, tokens):
 
 
 def _isolated_tags(token, tags_by_token, visible):
-    tags = tags_by_token.get(token, set())
-    if not tags:
-        return []
     neighbors = visible.get(token, set())
+    if not neighbors:
+        return []
     isolated = []
-    for tag in sorted(tags):
+    for tag in sorted(tags_by_token.get(token, set())):
         if not any(tag in tags_by_token.get(neighbor, set()) for neighbor in neighbors):
             isolated.append(tag)
     return isolated
@@ -167,8 +171,7 @@ def _bridge_paths(token, isolated_tags, tags_by_token, visible):
     if not isolated_tags:
         return []
     direct = visible.get(token, set())
-    found = []
-    seen = set()
+    found, seen = [], set()
     for tag in isolated_tags:
         for middle in sorted(direct):
             for target in sorted(visible.get(middle, set())):
@@ -221,17 +224,12 @@ def analyze_graph(graph):
             status = STATUS_ORPHAN
         elif visible_n == 0 and internal_n > 0:
             status = STATUS_VISUAL
-        elif visible_n <= 1 or structural_n <= 2:
+        elif visible_n <= 1 and structural_n <= 2:
             status = STATUS_WEAK
         else:
             status = STATUS_HEALTHY
 
-        weighted = (
-            assoc_n
-            + 1.45 * semantic_n
-            + 0.55 * sequence_n
-            + 1.10 * event_n
-        )
+        weighted = assoc_n + (1.45 * semantic_n) + (0.55 * sequence_n) + (1.10 * event_n)
         health_score = 1.0 - math.exp(-weighted / 4.0) if weighted > 0 else 0.0
         isolated_tags = _isolated_tags(token, tags_by_token, visible)
         bridges = _bridge_paths(token, isolated_tags, tags_by_token, visible)
@@ -294,7 +292,7 @@ def ensure_health(core, vault, persist=True):
 
 
 def health_summary(core, vault, status=None, tag_isolated=False, limit=100):
-    graph, health = ensure_health(core, vault, persist=True)
+    _graph, health = ensure_health(core, vault, persist=True)
     rows = list((health.get("노드", {}) or {}).values())
     if status:
         rows = [row for row in rows if row.get("상태") == status]
@@ -391,8 +389,9 @@ def _decorate_visual(graph, visual):
         node["health_score"] = row.get("건강도", 0)
         node["tag_isolated"] = bool(row.get("태그필터고립"))
         node["isolated_tags"] = list(row.get("고립태그", [])[:8])
-    stats = visual.setdefault("stats", {})
-    stats["node_health"] = (graph.get("노드건강도", {}) or {}).get("요약", {})
+    visual.setdefault("stats", {})["node_health"] = (
+        graph.get("노드건강도", {}) or {}
+    ).get("요약", {})
     return visual
 
 
@@ -418,7 +417,7 @@ def make_graph_snapshot(core, original_graph_snapshot):
 def make_rebuild(core, original_rebuild):
     def rebuild(vault, window=4):
         result = original_rebuild(vault, window=window)
-        graph, health = ensure_health(core, vault, persist=True)
+        _graph, health = ensure_health(core, vault, persist=True)
         result["node_health_version"] = VERSION
         result["node_health"] = health.get("요약", {})
         return result
