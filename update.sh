@@ -40,14 +40,16 @@ echo "[WordMap] 업데이트 적용 중..."
 git pull --ff-only
 
 if python -m py_compile \
-  core.py cleaning.py grammar.py lexicon.py language.py \
-  relations.py hybrid.py sequence.py generation.py syntax_tags.py activation.py \
-  wordmap_gpt2.py lexicon_notes.py ui_patch.py selftest.py selftest_gpt2.py \
-  launch.py wordmap_mobile.py \
+  core.py cleaning.py corpus_filter.py grammar.py lexicon.py language.py \
+  relations.py relation_guard.py hybrid.py sequence.py generation.py generation_tokens.py \
+  syntax_tags.py activation.py wordmap_gpt2.py lexicon_notes.py ui_patch.py \
+  selftest.py selftest_gpt2.py selftest_v010.py launch.py wordmap_mobile.py \
   && python selftest.py \
-  && python selftest_gpt2.py; then
+  && python selftest_gpt2.py \
+  && python selftest_v010.py; then
   NEW_VERSION="$(cat VERSION 2>/dev/null || echo unknown)"
   echo "[WordMap] 업데이트 완료: $OLD_VERSION -> $NEW_VERSION"
+  echo "[WordMap] v0.10은 언어표현/생성 순서 데이터를 다시 만들므로 전체 재생성이 필요합니다."
   echo "[WordMap] 서버가 실행 중이었다면 Ctrl+C 후 bash start.sh 로 다시 실행하세요."
 else
   echo "[WordMap] 새 버전 검사 실패. 이전 버전으로 되돌립니다."
