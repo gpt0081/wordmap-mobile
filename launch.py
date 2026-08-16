@@ -15,11 +15,13 @@ import syntax_tags
 import syntax_bridge
 import event_graph
 import activation
+import context_map
 import wordmap_gpt2
 import event_guidance
 import visualizer
 import lexicon_notes
 import node_health
+import credit_learning
 
 # Order matters:
 # 1) basic graph cleanup
@@ -34,11 +36,13 @@ import node_health
 # 10) bridge graph-less grammar words back into generation pattern checks
 # 11) Situation/Event Graph: predicate + actor/place/target roles
 # 12) dynamic context activation
-# 13) WordMap GPT-2 autoregressive generation
-# 14) event-guided context/start-node correction + direct event retrieval
-# 15) layered visual debugger trace + graph snapshot API
-# 16) expose lexicon + grammar metadata in Obsidian notes
-# 17) node health/orphan analyzer: real/weak/visual/tag-filter isolation diagnosis
+# 13) persistent ContextMap + context gating
+# 14) WordMap GPT-2 autoregressive generation
+# 15) event-guided context/start-node correction + direct event retrieval
+# 16) layered visual debugger trace + graph snapshot API
+# 17) expose lexicon + grammar metadata in Obsidian notes
+# 18) node health/orphan analyzer
+# 19) credit backprop: feedback reward -> usage/context/origin weights
 cleaning.apply(core)
 corpus_filter.apply(core)
 language.apply(core)
@@ -53,22 +57,26 @@ syntax_tags.apply(core)
 syntax_bridge.apply(syntax_tags)
 event_graph.apply(core)
 activation.apply(core)
+context_map.apply(core, activation)
 wordmap_gpt2.apply(core)
 event_guidance.apply(core)
 visualizer.apply(core)
 lexicon_notes.apply(core)
 node_health.apply(core)
+credit_learning.apply(core, wordmap_gpt2)
 
 import wordmap_mobile
 import ui_patch
 import corpus_web
 import visual_ui
 import node_health_web
+import learning_web
 
 ui_patch.apply(wordmap_mobile)
 corpus_web.apply(wordmap_mobile, core)
 visual_ui.apply(wordmap_mobile)
 node_health_web.apply(wordmap_mobile, core)
+learning_web.apply(wordmap_mobile, core)
 
 if __name__ == "__main__":
     wordmap_mobile.main()
