@@ -28,3 +28,6 @@ jobs:
           python selftest_v015.py
           python selftest_v016.py
           python selftest_visualizer.py
+      - name: Runtime wiring
+        run: |
+          python -c "import launch; print('WordMap v0.16 runtime wiring: OK')"
