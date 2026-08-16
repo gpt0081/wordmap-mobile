@@ -27,6 +27,7 @@ import dialogue_session
 import visualizer
 import lexicon_notes
 import node_health
+import dialogue_corpus
 import credit_learning
 import experiment_harness
 
@@ -43,10 +44,11 @@ import experiment_harness
 # 10) Situation/Event Graph
 # 11) dynamic activation + persistent ContextMap gate
 # 12) WordMap GPT-2-style autoregression + event guidance
-# 13) persistent dialogue-session context
+# 13) persistent runtime dialogue-session context
 # 14) visual trace + lexicon notes + node-health diagnostics
-# 15) Credit Backprop usage/context/origin learning
-# 16) B0/B1/B2/B3 experiment harness
+# 15) session-aware dialogue corpus map on full rebuild
+# 16) Credit Backprop usage/context/origin learning
+# 17) B0/B1/B2/B3 experiment harness
 cleaning.apply(core)
 corpus_filter.apply(core)
 language.apply(core)
@@ -73,6 +75,7 @@ dialogue_session.apply(core)
 visualizer.apply(core)
 lexicon_notes.apply(core)
 node_health.apply(core)
+dialogue_corpus.apply(core)
 credit_learning.apply(core, wordmap_gpt2)
 experiment_harness.apply(core)
 
