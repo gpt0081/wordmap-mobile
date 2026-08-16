@@ -42,14 +42,16 @@ git pull --ff-only
 if python -m py_compile \
   core.py cleaning.py corpus_filter.py grammar.py lexicon.py language.py \
   relations.py relation_guard.py hybrid.py sequence.py generation.py generation_tokens.py \
-  syntax_tags.py syntax_bridge.py activation.py wordmap_gpt2.py lexicon_notes.py ui_patch.py \
-  selftest.py selftest_gpt2.py selftest_v010.py launch.py wordmap_mobile.py \
+  syntax_tags.py syntax_bridge.py activation.py wordmap_gpt2.py visualizer.py \
+  lexicon_notes.py ui_patch.py visual_ui.py selftest.py selftest_gpt2.py \
+  selftest_v010.py selftest_visualizer.py launch.py wordmap_mobile.py \
   && python selftest.py \
   && python selftest_gpt2.py \
-  && python selftest_v010.py; then
+  && python selftest_v010.py \
+  && python selftest_visualizer.py; then
   NEW_VERSION="$(cat VERSION 2>/dev/null || echo unknown)"
   echo "[WordMap] 업데이트 완료: $OLD_VERSION -> $NEW_VERSION"
-  echo "[WordMap] v0.10은 언어표현/생성 순서 데이터를 다시 만들므로 전체 재생성이 필요합니다."
+  echo "[WordMap] v0.11 Visual Debugger는 기존 graph.json을 바로 읽으므로 전체 재생성은 필요 없습니다."
   echo "[WordMap] 서버가 실행 중이었다면 Ctrl+C 후 bash start.sh 로 다시 실행하세요."
 else
   echo "[WordMap] 새 버전 검사 실패. 이전 버전으로 되돌립니다."
