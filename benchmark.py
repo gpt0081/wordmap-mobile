@@ -15,6 +15,10 @@ CORPUS = [
     "철수는 도서관에서 책자를 읽는다.",
     "학생은 교실에서 문제집을 읽는다.",
     "고양이는 방에서 사료를 먹는다.",
+    # One-character noun evidence is supplied explicitly so this benchmark
+    # measures event structure rather than the separate one-char noun heuristic.
+    "숲은 생태계다.",
+    "숲이 존재한다.",
 ]
 
 EXTRACTION_CASES = [
