@@ -14,6 +14,18 @@ window.askQ = async function(){
       limit:20
     });
 
+    let qinfo=d['질문분석']||{};
+    let qtags=qinfo['태그']||[];
+    let questionHtml='';
+    if(qtags.length){
+      questionHtml='<div class="result"><div class="token">질문 분석</div>'
+        +'<div class="meta" style="margin-top:7px">의도: '
+        +qtags.map(esc).join(', ')+'</div>'
+        +'<div class="meta" style="margin-top:5px">핵심 표제어: '
+        +(qinfo['핵심표제어']||[]).map(esc).join(', ')+'</div>'
+        +'</div>';
+    }
+
     let analysis=(d.surface_analysis||[]);
     let analysisHtml='';
     let compounds=analysis.filter(x=>x.compound);
@@ -32,9 +44,14 @@ window.askQ = async function(){
         +generated.map((x,i)=>{
           let mode=x.mode==='semantic'?'의미관계 기반':'말뭉치 순서 기반';
           let path=(x.path||[]).map(esc).join(' → ');
+          let pattern=x.grammar_pattern||'';
+          let patternCount=Number(x.grammar_pattern_count||0);
           return '<div style="margin-top:13px"><b>'+(i+1)+'. '+esc(x.text)+'</b>'
             +'<div class="meta" style="margin-top:4px">'+mode
-            +(path?' · 경로 '+path:'')+'</div></div>';
+            +(path?' · 경로 '+path:'')+'</div>'
+            +(pattern?'<div class="meta" style="margin-top:3px">문법 패턴: '
+              +esc(pattern)+(patternCount?' · 관찰 '+patternCount+'회':'')+'</div>':'')
+            +'</div>';
         }).join('')
         +'</div>';
     }
@@ -64,6 +81,7 @@ window.askQ = async function(){
       '<div class="meta">질문 토큰: '+d.query_tokens.map(esc).join(', ')
       +'<br>시작 노드: '+d.seed_tokens.map(esc).join(', ')+'</div>'
       +(d.warning?'<div class="warn">'+esc(d.warning)+'</div>':'')
+      +questionHtml
       +analysisHtml
       +generatedHtml
       +nextHtml
