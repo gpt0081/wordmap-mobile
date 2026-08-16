@@ -4,13 +4,15 @@ import math
 
 import activation
 import generation
+import language
 import syntax_tags
 
-VERSION = "0.9.0"
+VERSION = "0.10.0"
 BEAM_WIDTH = 10
 EXPAND_PER_BEAM = 4
 MAX_WORDS = 10
 MAX_SEQUENCE_CANDIDATES = 18
+MAX_CONTEXT_CANDIDATES = 24
 
 ACTIVATION_WEIGHT = 1.35
 GRAMMAR_WEIGHT = 0.80
@@ -78,6 +80,7 @@ def _sequence_candidates(graph, path):
             "bigram_probability": bi_p,
             "trigram_probability": tri_p,
             "model": model,
+            "origins": ["말뭉치 순서"],
         })
 
     rows.sort(
@@ -90,11 +93,119 @@ def _sequence_candidates(graph, path):
     return rows[:MAX_SEQUENCE_CANDIDATES]
 
 
+def _known_generation_token(graph, token):
+    if not token:
+        return False
+    data = _generation_data(graph)
+    return bool(
+        token in graph.get("nodes", {})
+        or token in data.get("forms", {})
+        or token in data.get("bigrams", {})
+    )
+
+
+def _relation_targets(graph, sources):
+    rels = graph.get("relations", {})
+    rows = rels.values() if isinstance(rels, dict) else rels
+    source_set = set(sources)
+    out = []
+    for rel in rows or []:
+        if rel.get("source") not in source_set or not rel.get("target"):
+            continue
+        out.append((
+            rel.get("target"),
+            float(rel.get("confidence", 0)),
+            rel.get("label", rel.get("relation", "의미관계")),
+        ))
+    return out
+
+
+def _candidate_pool(graph, path, state):
+    """Candidate union for the WordMap autoregressive model.
+
+    Unlike v0.9 this is not trapped inside observed bigram/trigram successors.
+    New candidates can enter from active context, semantic relations, or graph
+    neighbors, but receive a conservative prior unless corpus order supports them.
+    """
+    merged = {}
+
+    def add(token, probability, origin, **extra):
+        if not token or token in path or not _known_generation_token(graph, token):
+            return
+        probability = max(1e-6, min(1.0, float(probability)))
+        row = merged.setdefault(token, {
+            "token": token,
+            "count": 0,
+            "probability": 0.0,
+            "bigram_probability": 0.0,
+            "trigram_probability": 0.0,
+            "model": "문맥 확장",
+            "origins": [],
+        })
+        row["probability"] = max(float(row.get("probability", 0)), probability)
+        if origin not in row["origins"]:
+            row["origins"].append(origin)
+        for key, value in extra.items():
+            if key in {"count"}:
+                row[key] = max(int(row.get(key, 0)), int(value))
+            elif key in {"bigram_probability", "trigram_probability"}:
+                row[key] = max(float(row.get(key, 0)), float(value))
+            elif key == "model" and value:
+                row[key] = value
+
+    for row in _sequence_candidates(graph, path):
+        add(
+            row["token"],
+            row["probability"],
+            "말뭉치 순서",
+            count=row.get("count", 0),
+            bigram_probability=row.get("bigram_probability", 0),
+            trigram_probability=row.get("trigram_probability", 0),
+            model=row.get("model"),
+        )
+
+    for row in activation.top_rows(state, limit=MAX_CONTEXT_CANDIDATES, exclude=path):
+        token = row.get("표제어")
+        active = float(row.get("활성도", 0))
+        add(token, 0.025 + (0.095 * active), "문맥 활성")
+
+    for target, confidence, label in _relation_targets(graph, path[-3:]):
+        add(target, 0.04 + (0.08 * confidence), f"의미관계/{label}")
+
+    for source in path[-2:]:
+        neighbors = sorted(
+            (graph.get("edges", {}).get(source, {}) or {}).items(),
+            key=lambda x: -float((x[1] or {}).get("score", 0)),
+        )[:12]
+        for target, meta in neighbors:
+            strength = max(0.0, min(1.0, float((meta or {}).get("score", 0))))
+            add(target, 0.015 + (0.05 * strength), "연상 이웃")
+
+    rows = list(merged.values())
+    rows.sort(
+        key=lambda x: (
+            -float(x.get("probability", 0)),
+            -int(x.get("count", 0)),
+            str(x.get("token", "")),
+        )
+    )
+    return rows[:MAX_CONTEXT_CANDIDATES]
+
+
 def _aligned_tokens(graph, path, surfaces):
     tokens = []
     for lemma, surface in zip(path, surfaces):
         pos = str(graph.get("nodes", {}).get(lemma, {}).get("pos", "unknown"))
-        tokens.append(syntax_tags._entry_token(surface, {"lemma": lemma, "pos": pos}))
+        confidence = 0.5
+        if pos == "unknown":
+            resolved = language.resolve_surface_for_grammar(surface)
+            if resolved:
+                pos = str(resolved[0].get("pos", "unknown"))
+                confidence = float(resolved[0].get("confidence", 0.5))
+        tokens.append(syntax_tags._entry_token(
+            surface,
+            {"lemma": lemma, "pos": pos, "confidence": confidence},
+        ))
     syntax_tags._refine_roles(tokens)
     return tokens
 
@@ -107,10 +218,7 @@ def _has_connector_between(tokens, left_index, right_index):
 
 
 def _duplicate_case_conflict(tokens, particles):
-    indices = [
-        i for i, token in enumerate(tokens)
-        if token.get("조사") in particles
-    ]
+    indices = [i for i, token in enumerate(tokens) if token.get("조사") in particles]
     if len(indices) <= 1:
         return False
     for left, right in zip(indices, indices[1:]):
@@ -120,12 +228,6 @@ def _duplicate_case_conflict(tokens, particles):
 
 
 def grammar_fit(graph, path, surfaces):
-    """Return (0..1 compatibility, pattern, explanation).
-
-    This is deliberately conservative. Korean can license double-subject and
-    other constructions, but until the corpus provides stronger dependency
-    evidence we reject repeated nominative/object slots without coordination.
-    """
     if not path or len(path) != len(surfaces):
         return 0.0, "미분류", "경로와 표면형 길이 불일치"
 
@@ -149,7 +251,8 @@ def grammar_fit(graph, path, surfaces):
             return 0.0, syntax_tags.pattern_from_tokens(tokens), "인접 문법 역할 충돌"
 
     pattern = syntax_tags.pattern_from_tokens(tokens)
-    patterns = graph.get("문법", {}).get("패턴통계", {}) or {}
+    grammar_data = graph.get("문법", {})
+    patterns = grammar_data.get("정규패턴통계", {}) or grammar_data.get("패턴통계", {}) or {}
     terminal = generation._sentence_valid(graph, path, surfaces)
 
     if not patterns:
@@ -158,9 +261,9 @@ def grammar_fit(graph, path, surfaces):
     exact = int(patterns.get(pattern, 0))
     if terminal:
         if exact <= 0:
-            return 0.0, pattern, "완성 문장 패턴 미관찰"
+            return 0.0, pattern, "완성 정규패턴 미관찰"
         score = min(1.0, 0.82 + (0.04 * math.log1p(exact)))
-        return score, pattern, f"완성 패턴 {exact}회 관찰"
+        return score, pattern, f"정규 완성패턴 {exact}회 관찰"
 
     prefix_matches = [
         int(count)
@@ -170,11 +273,9 @@ def grammar_fit(graph, path, surfaces):
     if prefix_matches:
         best = max(prefix_matches)
         score = min(0.98, 0.72 + (0.04 * math.log1p(best)))
-        return score, pattern, f"패턴 접두부 {best}회 이상 관찰"
+        return score, pattern, f"정규 패턴 접두부 {best}회 이상 관찰"
 
-    # Tagging is still heuristic, so an unseen partial prefix is penalized
-    # rather than immediately killed. A completed unseen pattern is rejected.
-    return 0.32, pattern, "부분 패턴 미관찰"
+    return 0.30, pattern, "부분 정규패턴 미관찰"
 
 
 def _softmax(rows):
@@ -198,11 +299,8 @@ def _score_candidates(graph, context_seeds, path, surfaces):
     )
     rows = []
 
-    for candidate in _sequence_candidates(graph, path):
+    for candidate in _candidate_pool(graph, path, state):
         target = candidate["token"]
-        if path.count(target) >= 1:
-            continue
-
         surface = generation._target_surface(graph, path, surfaces, target)
         if not surface:
             continue
@@ -219,15 +317,15 @@ def _score_candidates(graph, context_seeds, path, surfaces):
 
         active = activation.candidate_activation(state, target)
         relation = generation._relation_bonus(graph, path[-1], target)
-        sequence_probability = max(1e-9, float(candidate["probability"]))
+        prior = max(1e-9, float(candidate["probability"]))
         repeat_penalty = REPEAT_PENALTY if target in path else 0.0
 
         raw = (
-            math.log(sequence_probability)
+            math.log(prior)
             + (ACTIVATION_WEIGHT * active)
             + (GRAMMAR_WEIGHT * grammar_score)
             + (RELATION_WEIGHT * relation)
-            + (TRIGRAM_BONUS if candidate["trigram_probability"] > 0 else 0.0)
+            + (TRIGRAM_BONUS if candidate.get("trigram_probability", 0) > 0 else 0.0)
             - repeat_penalty
         )
 
@@ -260,10 +358,11 @@ def _trace_candidates(rows, limit=5):
             "표제어": row["token"],
             "표면형": row["surface"],
             "선택확률": round(float(row.get("selection_probability", 0)), 4),
-            "순서확률": round(float(row.get("probability", 0)), 4),
+            "순서/사전확률": round(float(row.get("probability", 0)), 4),
             "문맥활성": round(float(row.get("activation", 0)), 4),
             "문법적합": round(float(row.get("grammar_score", 0)), 4),
             "의미보너스": round(float(row.get("relation_bonus", 0)), 4),
+            "후보출처": list(row.get("origins", [])),
             "문법근거": row.get("grammar_reason", ""),
         })
     return out
@@ -289,6 +388,27 @@ def _initial_beams(graph, seeds):
     return beams
 
 
+def _context_support(graph, seeds, path):
+    if len(path) < 2:
+        return 0.0, [], []
+    trace = []
+    total = 0.0
+    weight_total = 0.0
+    final_state = None
+    for i in range(1, len(path)):
+        prefix = path[:i]
+        target = path[i]
+        state = activation.build_context_state(graph, seeds=seeds, path=prefix, steps=2)
+        active = activation.candidate_activation(state, target)
+        weight = 1.0 + (0.12 * i)
+        total += active * weight
+        weight_total += weight
+        trace.append({"문맥": list(prefix), "후보": target, "활성도": round(active, 4)})
+        final_state = state
+    support = total / weight_total if weight_total else 0.0
+    return round(support, 4), trace, activation.top_rows(final_state or {}, limit=6, exclude=[])
+
+
 def _complete_row(graph, seeds, beam):
     path = beam["path"]
     surfaces = beam["surfaces"]
@@ -303,11 +423,7 @@ def _complete_row(graph, seeds, beam):
     if grammar_bonus is None:
         return None
 
-    support, activation_trace, active_top = activation.path_activation_support(
-        graph,
-        seeds[-1],
-        path,
-    )
+    support, activation_trace, active_top = _context_support(graph, seeds, path)
     chosen_activations = [
         float(step.get("선택문맥활성", 0))
         for step in beam["trace"]
@@ -321,7 +437,7 @@ def _complete_row(graph, seeds, beam):
     return {
         "text": generation._finish_text(surfaces),
         "mode": "wordmap_gpt2",
-        "basis": "단어지도 GPT-2식 자동회귀 + 동적 문맥 활성화 + 관찰 문법 패턴",
+        "basis": "단어지도 GPT-2식 자동회귀 + 확장 후보공간 + 동적 문맥 + 정규 문법패턴",
         "score": round(float(beam["score"] + grammar_bonus), 4),
         "path": list(path),
         "grammar_pattern": pattern,
@@ -374,6 +490,7 @@ def generate_autoregressive_sentences(graph, seeds, limit=3, max_words=MAX_WORDS
                     "선택확률": round(float(chosen.get("selection_probability", 0)), 4),
                     "선택문맥활성": round(float(chosen.get("activation", 0)), 4),
                     "선택문법적합": round(float(chosen.get("grammar_score", 0)), 4),
+                    "선택후보출처": list(chosen.get("origins", [])),
                 }
                 next_beams.append({
                     "path": beam["path"] + [chosen["token"]],
@@ -438,7 +555,7 @@ def make_ask(core, original_ask):
             result["자동회귀생성과정"] = []
 
         result["wordmap_gpt2_version"] = VERSION
-        result["생성모델"] = "단어지도 GPT-2식 자동회귀"
+        result["생성모델"] = "단어지도 GPT-2식 자동회귀 v0.10"
         return result
 
     return ask
@@ -448,6 +565,7 @@ def make_status(original_status):
     def status():
         out = original_status()
         out["wordmap_gpt2_version"] = VERSION
+        out["candidate_space"] = "n-gram+문맥활성+의미관계+연상이웃"
         return out
     return status
 
