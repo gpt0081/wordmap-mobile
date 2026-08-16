@@ -163,7 +163,7 @@ setTimeout(()=>{
   if(!old)return;
   window.wmShowNode=function(id){
     old(id);
-    let node=(window.WMV?.graph?.nodes||[]).find(n=>n.id===id),el=document.getElementById('wmNodeInfo');
+    let node=window.wmNodeById?window.wmNodeById(id):null,el=document.getElementById('wmNodeInfo');
     if(!node||!el)return;
     if(node.health_status){
       let extra='<br><span class="meta">연결상태 '+nhEsc(node.health_status)+' · 건강도 '+Number(node.health_score||0).toFixed(3);
