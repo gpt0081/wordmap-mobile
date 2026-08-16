@@ -4,6 +4,7 @@ import core
 import cleaning
 import corpus_filter
 import language
+import corpus_manager
 import relations
 import relation_guard
 import hybrid
@@ -23,21 +24,23 @@ import lexicon_notes
 # 1) basic graph cleanup
 # 2) analysis-only corpus scaffolding filter (source Corpus is untouched)
 # 3) dictionary-style surface -> lemma/POS resolution with graph/grammar split
-# 4) metalinguistic relation guard + semantic relation extraction
-# 5) sparse association links
-# 6) ordered graph next-word statistics
-# 7) grammar-preserving generation token stream + sentence statistics
-# 8) Korean grammar tags and normalized sentence patterns
-# 9) bridge graph-less grammar words back into generation pattern checks
-# 10) Situation/Event Graph: predicate + actor/place/target roles
-# 11) dynamic context activation
-# 12) WordMap GPT-2 autoregressive generation
-# 13) event-guided context/start-node correction + direct event retrieval
-# 14) layered visual debugger trace + graph snapshot API
-# 15) expose lexicon + grammar metadata in Obsidian notes
+# 4) corpus manager: per-file enable/disable + edit/delete + rebuild dirty state
+# 5) metalinguistic relation guard + semantic relation extraction
+# 6) sparse association links
+# 7) ordered graph next-word statistics
+# 8) grammar-preserving generation token stream + sentence statistics
+# 9) Korean grammar tags and normalized sentence patterns
+# 10) bridge graph-less grammar words back into generation pattern checks
+# 11) Situation/Event Graph: predicate + actor/place/target roles
+# 12) dynamic context activation
+# 13) WordMap GPT-2 autoregressive generation
+# 14) event-guided context/start-node correction + direct event retrieval
+# 15) layered visual debugger trace + graph snapshot API
+# 16) expose lexicon + grammar metadata in Obsidian notes
 cleaning.apply(core)
 corpus_filter.apply(core)
 language.apply(core)
+corpus_manager.apply(core)
 relation_guard.apply(relations)
 relations.apply(core)
 hybrid.apply(core, relations)
@@ -55,9 +58,11 @@ lexicon_notes.apply(core)
 
 import wordmap_mobile
 import ui_patch
+import corpus_web
 import visual_ui
 
 ui_patch.apply(wordmap_mobile)
+corpus_web.apply(wordmap_mobile, core)
 visual_ui.apply(wordmap_mobile)
 
 if __name__ == "__main__":
