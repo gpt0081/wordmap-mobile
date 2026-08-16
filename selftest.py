@@ -2,6 +2,7 @@
 
 import re
 
+import activation
 import generation
 import grammar
 import lexicon
@@ -63,7 +64,6 @@ def main():
     automobile = lexicon.resolve_many(data, "자동차")
     assert len(automobile) == 1 and automobile[0]["lemma"] == "자동차", automobile
 
-    # Korean grammar tags and sentence-pattern grouping.
     def resolver(surface):
         return lexicon.resolve_many(data, surface)
 
@@ -182,7 +182,60 @@ def main():
     assert semantic and semantic[0]["text"] == "황은 가황에 사용된다.", semantic
     assert semantic[0]["grammar_pattern"] == "주어 → 부사어 → 서술어", semantic
 
-    print("WordMap v0.7.0 Korean grammar-tag/pattern self-test: OK")
+    # GPT-2-inspired dynamic context activation. Equal sequence frequency must
+    # be broken by support from the whole current context, not the last word alone.
+    active_graph = {
+        "edges": {
+            "가황": {
+                "촉진하다": {"score": 0.90},
+                "가격": {"score": 0.05},
+            },
+            "반응": {},
+        },
+        "relations": {
+            "r1": {
+                "source": "가황", "relation": "affects", "label": "영향",
+                "target": "반응", "confidence": 0.95,
+            }
+        },
+        "generation": {
+            "bigrams": {
+                "가황": {"반응": 3},
+                "반응": {"촉진하다": 1, "가격": 1},
+            }
+        },
+    }
+    state = activation.build_context_state(
+        active_graph,
+        seeds=["가황"],
+        path=["가황", "반응"],
+        steps=2,
+    )
+    assert activation.candidate_activation(state, "촉진하다") > activation.candidate_activation(state, "가격"), state
+    reranked = activation.rerank_next_candidates(
+        [
+            {"token": "가격", "count": 1, "probability": 0.5},
+            {"token": "촉진하다", "count": 1, "probability": 0.5},
+        ],
+        state,
+    )
+    assert reranked[0]["token"] == "촉진하다", reranked
+    assert reranked[0]["activation"] > reranked[1]["activation"], reranked
+
+    support, trace, _top = activation.path_activation_support(
+        active_graph,
+        "가황",
+        ["가황", "반응", "촉진하다"],
+    )
+    assert support > 0 and len(trace) == 2, (support, trace)
+
+    activation.patch_generation()
+    activated_generated = generation.generate_sequence_sentences(sentence_graph, "고무", limit=3)
+    assert activated_generated, activated_generated
+    assert "activation_support" in activated_generated[0], activated_generated
+    assert "동적 문맥 활성화" in activated_generated[0]["basis"], activated_generated
+
+    print("WordMap v0.8.0 Korean grammar + dynamic context activation self-test: OK")
 
 
 if __name__ == "__main__":
