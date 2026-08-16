@@ -42,7 +42,7 @@ git pull --ff-only
 if python -m py_compile \
   core.py cleaning.py corpus_filter.py grammar.py lexicon.py language.py \
   relations.py relation_guard.py hybrid.py sequence.py generation.py generation_tokens.py \
-  syntax_tags.py activation.py wordmap_gpt2.py lexicon_notes.py ui_patch.py \
+  syntax_tags.py syntax_bridge.py activation.py wordmap_gpt2.py lexicon_notes.py ui_patch.py \
   selftest.py selftest_gpt2.py selftest_v010.py launch.py wordmap_mobile.py \
   && python selftest.py \
   && python selftest_gpt2.py \
