@@ -9,6 +9,7 @@ from urllib.parse import urlparse
 from core import (
     ask,
     current_vault,
+    graph_snapshot,
     ingest,
     rebuild_wordmap,
     set_vault,
@@ -242,6 +243,12 @@ class Handler(BaseHTTPRequestHandler):
             self.wfile.write(raw)
         elif path == "/api/status":
             self.send_json(status())
+        elif path == "/api/graph":
+            vault = current_vault()
+            if not vault:
+                self.send_json({"error": "Vault가 선택되지 않았습니다."}, 400)
+            else:
+                self.send_json(graph_snapshot(vault))
         else:
             self.send_json({"error": "not found"}, 404)
 
