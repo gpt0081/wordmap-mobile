@@ -7,6 +7,7 @@ import grammar
 import lexicon
 import relations
 import sequence
+import syntax_tags
 
 
 def main():
@@ -17,7 +18,8 @@ def main():
         "사용하는 방법과 조절하는 방법을 비교한다. 많이 모을 수 있다. "
         "많아지면 처리하기 어렵다. 가격은 중요하다. 가격이 오르면 가격 변화를 확인한다. "
         "고무는 재료다. 고무가 필요하다. 고무 배합을 연구한다. "
-        "가황은 중요한 과정이다. 자동차는 제품이다. 차는 이동수단이다. "
+        "가황은 중요한 과정이다. 가황은 고무 물성을 조절한다. "
+        "자동차는 제품이다. 차는 이동수단이다. "
         "데이터는 기업의 의사결정에 사용된다. 고무 배합에서 가황은 중요한 과정이다.",
         "서로 연결된다. 서로의 관계를 본다. 모든 데이터를 본다. 주로 사용한다. "
         "주는 값을 확인한다. 가을에는 온도가 낮다. 가을의 변화와 온도의 변화를 본다. "
@@ -61,6 +63,33 @@ def main():
     automobile = lexicon.resolve_many(data, "자동차")
     assert len(automobile) == 1 and automobile[0]["lemma"] == "자동차", automobile
 
+    # Korean grammar tags and sentence-pattern grouping.
+    def resolver(surface):
+        return lexicon.resolve_many(data, surface)
+
+    tagged = syntax_tags.analyze_sentence(
+        "가황은 고무 물성을 조절한다.",
+        resolver=resolver,
+    )
+    assert tagged["패턴"] == "주어 → 관형어 → 목적어 → 서술어", tagged
+    roles = [token["문장역할"] for token in tagged["토큰"]]
+    assert roles == ["주어", "관형어", "목적어", "서술어"], tagged
+    assert "품사/명사" in tagged["토큰"][0]["태그"], tagged
+    assert "문장역할/주어" in tagged["토큰"][0]["태그"], tagged
+    assert "문법형태/조사/은" in tagged["토큰"][0]["태그"], tagged
+
+    syntax_graph = {}
+    syntax_tags.accumulate_syntax(syntax_graph, tagged)
+    assert syntax_graph["문법"]["패턴통계"][tagged["패턴"]] == 1, syntax_graph
+    assert syntax_graph["문법"]["표제어역할"]["가황"]["주어"] == 1, syntax_graph
+
+    question = syntax_tags.analyze_question("가황 어디")
+    assert question["내용표현"] == "가황", question
+    assert question["태그"] == ["질문의도/장소"], question
+    question2 = syntax_tags.analyze_question("우주 무엇")
+    assert question2["내용표현"] == "우주", question2
+    assert question2["태그"] == ["질문의도/정의"], question2
+
     class Core:
         @staticmethod
         def tokenize(text):
@@ -100,7 +129,10 @@ def main():
             "고무": {"pos": "noun"},
             "가황": {"pos": "noun"},
             "사용하다": {"pos": "verb"},
-        }
+        },
+        "문법": {
+            "패턴통계": {"주어 → 부사어 → 서술어": 3}
+        },
     }
     for _ in range(3):
         generation.accumulate_generation(
@@ -109,6 +141,8 @@ def main():
         )
     generated = generation.generate_sequence_sentences(sentence_graph, "고무", limit=3)
     assert generated and generated[0]["text"] == "고무는 가황에 사용된다.", generated
+    assert generated[0]["grammar_pattern"] == "주어 → 부사어 → 서술어", generated
+    assert generated[0]["grammar_pattern_count"] == 3, generated
 
     incomplete = {"nodes": {"가황": {"pos": "noun"}, "중요하다": {"pos": "adjective"}}}
     generation.accumulate_generation(incomplete, [("가황", "가황은"), ("중요하다", "중요한")])
@@ -146,8 +180,9 @@ def main():
     }
     semantic = generation.generate_semantic_sentences(semantic_graph, ["황"], limit=3)
     assert semantic and semantic[0]["text"] == "황은 가황에 사용된다.", semantic
+    assert semantic[0]["grammar_pattern"] == "주어 → 부사어 → 서술어", semantic
 
-    print("WordMap v0.6.1 grammar/generation regression self-test: OK")
+    print("WordMap v0.7.0 Korean grammar-tag/pattern self-test: OK")
 
 
 if __name__ == "__main__":
