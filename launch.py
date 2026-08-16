@@ -7,6 +7,7 @@ import language
 import corpus_manager
 import corpus_roles
 import corpus_v1
+import corpus_v1_quality
 import corpus_integrity
 import relations
 import relation_guard
@@ -34,7 +35,7 @@ import experiment_harness
 # 2) analysis-only document scaffolding cleanup
 # 3) surface -> lemma/POS resolution
 # 4) corpus manager + TRAIN/DEV/TEST hard role guard
-# 5) Corpus v1 installer + integrity/leak checker
+# 5) Corpus v1 quality patch + installer + integrity/leak checker
 # 6) guarded semantic relations + sparse associations
 # 7) ordered word transitions + grammar-preserving generation stream
 # 8) Korean syntax/grammar tags
@@ -51,6 +52,7 @@ corpus_filter.apply(core)
 language.apply(core)
 corpus_manager.apply(core)
 corpus_roles.apply(core)
+corpus_v1_quality.apply(corpus_v1)
 corpus_v1.apply(core)
 corpus_integrity.apply(core)
 relation_guard.apply(relations)
