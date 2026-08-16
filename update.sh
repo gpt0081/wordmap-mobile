@@ -42,16 +42,20 @@ git pull --ff-only
 if python -m py_compile \
   core.py cleaning.py corpus_filter.py grammar.py lexicon.py language.py \
   relations.py relation_guard.py hybrid.py sequence.py generation.py generation_tokens.py \
-  syntax_tags.py syntax_bridge.py activation.py wordmap_gpt2.py visualizer.py \
-  lexicon_notes.py ui_patch.py visual_ui.py selftest.py selftest_gpt2.py \
-  selftest_v010.py selftest_visualizer.py launch.py wordmap_mobile.py \
+  syntax_tags.py syntax_bridge.py event_graph.py activation.py wordmap_gpt2.py event_guidance.py \
+  visualizer.py lexicon_notes.py ui_patch.py visual_ui.py benchmark.py \
+  selftest.py selftest_gpt2.py selftest_v010.py selftest_v012.py selftest_visualizer.py \
+  launch.py wordmap_mobile.py \
   && python selftest.py \
   && python selftest_gpt2.py \
   && python selftest_v010.py \
+  && python selftest_v012.py \
   && python selftest_visualizer.py; then
   NEW_VERSION="$(cat VERSION 2>/dev/null || echo unknown)"
   echo "[WordMap] 업데이트 완료: $OLD_VERSION -> $NEW_VERSION"
-  echo "[WordMap] v0.11 Visual Debugger는 기존 graph.json을 바로 읽으므로 전체 재생성은 필요 없습니다."
+  echo "[WordMap] v0.12 Situation/Event Graph는 Corpus에서 사건 구조를 새로 추출합니다."
+  echo "[WordMap] 웹에서 '저장된 말뭉치로 전체 재생성'을 반드시 한 번 실행하세요."
+  echo "[WordMap] 구조 Benchmark는 필요할 때: python benchmark.py"
   echo "[WordMap] 서버가 실행 중이었다면 Ctrl+C 후 bash start.sh 로 다시 실행하세요."
 else
   echo "[WordMap] 새 버전 검사 실패. 이전 버전으로 되돌립니다."
