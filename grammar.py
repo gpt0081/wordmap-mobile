@@ -3,7 +3,7 @@ from __future__ import annotations
 import re
 from collections import Counter, defaultdict
 
-VERSION = "0.6.1"
+VERSION = "0.10.0"
 
 WORD_RE = re.compile(r"[가-힣A-Za-z0-9][가-힣A-Za-z0-9_+\-./]{0,}")
 
@@ -86,6 +86,14 @@ COMMON_FORMS = {
     "서로": ("서로", "adverb", 0.99),
     "주로": ("주로", "adverb", 0.99),
     "모든": ("모두", "determiner", 0.96),
+    # Bare grammatical predicates are intentionally retained for syntax even
+    # though the graph tokenizer may later filter them as hub-like words.
+    "한다": ("하다", "verb", 0.99),
+    "했다": ("하다", "verb", 0.99),
+    "된다": ("되다", "verb", 0.99),
+    "됐다": ("되다", "verb", 0.99),
+    "하는": ("하다", "verb", 0.98),
+    "되는": ("되다", "verb", 0.98),
 }
 
 HADA_RULES = [
@@ -117,6 +125,7 @@ COPULA_RULES = [
     re.compile(r"^(?P<base>.+?)입니다$"), re.compile(r"^(?P<base>.+?)이었다$"),
     re.compile(r"^(?P<base>.+?)였다$"), re.compile(r"^(?P<base>.+?)이다$"),
 ]
+GENERIC_NEUNDA = re.compile(r"^(?P<stem>[가-힣]{1,20})는다$")
 
 POS_KO = {
     "noun": "명사", "verb": "동사", "adjective": "형용사",
@@ -221,6 +230,32 @@ def _predicate_item(lemma, pos="verb", confidence=0.94, reason="regular_predicat
     return [{"lemma": lemma, "pos": pos, "confidence": confidence, "reason": reason}]
 
 
+def syntax_fallback(surface):
+    """Grammar-only recovery for forms that should never disappear from syntax.
+
+    These entries are not automatically promoted to graph nodes. They exist so
+    sentence structure can retain function words and common predicate endings.
+    """
+    surface = surface.strip("._-/").lower()
+    if not surface:
+        return []
+    if surface == "수":
+        return [{"lemma": "수", "pos": "noun", "confidence": 0.99, "reason": "dependent_noun_syntax"}]
+    if surface == "것":
+        return [{"lemma": "것", "pos": "noun", "confidence": 0.99, "reason": "dependent_noun_syntax"}]
+    if surface in COMMON_FORMS:
+        lemma, pos, confidence = COMMON_FORMS[surface]
+        return [{"lemma": lemma, "pos": pos, "confidence": confidence, "reason": "syntax_common_form"}]
+    match = GENERIC_NEUNDA.match(surface)
+    if match:
+        return _predicate_item(match.group("stem") + "다", "verb", 0.82, "generic_neunda")
+    for pattern in COPULA_RULES:
+        match = pattern.match(surface)
+        if match and match.group("base"):
+            return [{"lemma": match.group("base"), "pos": "noun", "confidence": 0.97, "reason": "syntax_copula"}]
+    return []
+
+
 def analyze_surface(surface, evidence):
     surface = surface.strip("._-/").lower()
     if not surface:
@@ -256,6 +291,10 @@ def analyze_surface(surface, evidence):
         match = pattern.match(surface)
         if match and match.group("stem"):
             return _predicate_item(match.group("stem") + "지다", "verb", 0.92, "become_conjugation")
+
+    match = GENERIC_NEUNDA.match(surface)
+    if match:
+        return _predicate_item(match.group("stem") + "다", "verb", 0.82, "generic_neunda")
 
     if re.fullmatch(r"[가-힣]{2,}다", surface):
         return _predicate_item(surface, "verb", 0.72, "dictionary_form")
