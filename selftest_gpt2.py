@@ -28,7 +28,6 @@ def main():
         },
     }
 
-    # Same next-token frequency, different whole-context support.
     generation.accumulate_generation(
         graph,
         [("가황", "가황은"), ("반응", "반응을"), ("촉진하다", "촉진한다")],
@@ -53,8 +52,6 @@ def main():
     assert first_step["후보상위"][0]["표제어"] == "반응", first_step
     assert first_step["후보상위"][0]["문맥활성"] > first_step["후보상위"][1]["문맥활성"], first_step
 
-    # Topic + one nominative subject is allowed, but a second uncoordinated
-    # nominative subject is conservatively blocked during generation.
     conflict_graph = {
         "nodes": {
             "생태계": {"pos": "noun"},
@@ -70,14 +67,12 @@ def main():
     )
     assert fit == 0.0 and reason == "주격 조사 중복", (fit, reason)
 
-    # Every generation step must recompute a context-conditioned candidate
-    # distribution rather than reusing one static ranking.
     trace = rows[0]["generation_trace"]
     assert trace[0]["이전문맥"] == ["가황"], trace
     assert trace[1]["이전문맥"] == ["가황", "반응"], trace
     assert trace[0]["후보상위"] != trace[1]["후보상위"], trace
 
-    print("WordMap v0.9.0 autoregressive WordMap-GPT2 self-test: OK")
+    print("WordMap v0.10.0 autoregressive compatibility self-test: OK")
 
 
 if __name__ == "__main__":
