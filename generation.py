@@ -6,8 +6,9 @@ from collections import Counter
 
 import grammar
 import language
+import syntax_tags
 
-VERSION = "0.6.1"
+VERSION = "0.7.0"
 SEP = "\x1f"
 MAX_WORDS = 8
 BEAM_WIDTH = 6
@@ -343,6 +344,16 @@ def _finish_text(surfaces):
     return text
 
 
+def _grammar_pattern_meta(graph, path, surfaces):
+    pattern = syntax_tags.pattern_from_aligned(graph, path, surfaces)
+    count = syntax_tags.pattern_count(graph, pattern)
+    patterns_exist = bool(graph.get("문법", {}).get("패턴통계", {}))
+    if patterns_exist and count <= 0:
+        return pattern, count, None
+    bonus = min(0.55, math.log1p(max(0, count)) * 0.10) if count else 0.0
+    return pattern, count, bonus
+
+
 def generate_sequence_sentences(graph, seed, limit=3, max_words=MAX_WORDS):
     if not seed:
         return []
@@ -411,16 +422,21 @@ def generate_sequence_sentences(graph, seed, limit=3, max_words=MAX_WORDS):
     for path, surfaces, score, evidence in completed:
         if not _sentence_valid(graph, path, surfaces):
             continue
+        pattern, pattern_count, grammar_bonus = _grammar_pattern_meta(graph, path, surfaces)
+        if grammar_bonus is None:
+            continue
         text = _finish_text(surfaces)
         if not text or text in unique:
             continue
         unique[text] = {
             "text": text,
             "mode": "sequence",
-            "basis": "Corpus의 끊기지 않은 단어 순서",
-            "score": round(float(score), 4),
+            "basis": "Corpus의 끊기지 않은 단어 순서 + 관찰된 문법 패턴",
+            "score": round(float(score + grammar_bonus), 4),
             "path": path,
             "evidence": evidence,
+            "grammar_pattern": pattern,
+            "grammar_pattern_count": pattern_count,
         }
 
     ranked = sorted(
@@ -457,6 +473,24 @@ def _relation_sentence(rel):
     return templates.get(relation)
 
 
+RELATION_PATTERNS = {
+    "is_a": "주어 → 서술어",
+    "used_for": "주어 → 부사어 → 서술어",
+    "promotes": "주어 → 목적어 → 서술어",
+    "increases": "주어 → 목적어 → 서술어",
+    "decreases": "주어 → 목적어 → 서술어",
+    "affects": "주어 → 부사어 → 목적어 → 서술어",
+    "property": "주어 → 관형어 → 목적어 → 서술어",
+    "component": "주어 → 부사어 → 서술어",
+    "causes": "주어 → 목적어 → 서술어",
+    "requires": "주어 → 목적어 → 서술어",
+    "uses": "주어 → 목적어 → 서술어",
+    "contains": "주어 → 목적어 → 서술어",
+    "belongs_to": "주어 → 부사어 → 서술어",
+    "related_to": "주어 → 부사어 → 서술어",
+}
+
+
 def generate_semantic_sentences(graph, seeds, limit=4):
     seed_set = set(seeds or [])
     relations = graph.get("relations", {})
@@ -471,14 +505,17 @@ def generate_semantic_sentences(graph, seeds, limit=4):
         if not text or text in seen:
             continue
         seen.add(text)
+        relation_code = rel.get("relation")
         out.append({
             "text": text,
             "mode": "semantic",
             "basis": "WordMap 의미 관계",
             "score": round(float(rel.get("confidence", 0)), 4),
             "path": [rel.get("source"), rel.get("target")],
-            "relation": rel.get("label", rel.get("relation")),
+            "relation": rel.get("label", relation_code),
             "evidence": rel.get("evidence", [])[:2],
+            "grammar_pattern": RELATION_PATTERNS.get(relation_code, "주어 → 서술어"),
+            "grammar_pattern_count": 0,
         })
 
     out.sort(key=lambda x: (-float(x["score"]), x["text"]))
