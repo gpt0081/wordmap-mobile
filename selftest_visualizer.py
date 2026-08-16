@@ -11,15 +11,18 @@ class Core:
                 "생태계": {"frequency": 20, "pos": "noun", "pos_ko": "명사"},
                 "경쟁": {"frequency": 8, "pos": "noun", "pos_ko": "명사"},
                 "협력": {"frequency": 7, "pos": "noun", "pos_ko": "명사"},
+                "기생": {"frequency": 6, "pos": "noun", "pos_ko": "명사"},
                 "존재하다": {"frequency": 5, "pos": "verb", "pos_ko": "동사"},
             },
             "edges": {
                 "생태계": {
                     "경쟁": {"score": 0.8, "co": 3.0},
                     "협력": {"score": 0.7, "co": 2.0},
+                    "기생": {"score": 0.5, "co": 1.0},
                 },
                 "경쟁": {"생태계": {"score": 0.8, "co": 3.0}},
                 "협력": {"생태계": {"score": 0.7, "co": 2.0}},
+                "기생": {"생태계": {"score": 0.5, "co": 1.0}},
             },
             "relations": {
                 "r1": {
@@ -32,7 +35,7 @@ class Core:
             },
             "generation": {
                 "bigrams": {
-                    "생태계": {"경쟁": 3},
+                    "생태계": {"경쟁": 3, "기생": 1},
                     "경쟁": {"협력": 2},
                     "협력": {"존재하다": 2},
                 }
@@ -58,11 +61,14 @@ def main():
         focus=["생태계", "경쟁"],
         active=active,
         generation_path=["생태계", "경쟁", "협력", "존재하다"],
+        candidate_tokens=["기생"],
         limit=50,
     )
 
     ids = {node["id"] for node in snap["nodes"]}
-    assert {"생태계", "경쟁", "협력", "존재하다"} <= ids, ids
+    assert {"생태계", "경쟁", "협력", "기생", "존재하다"} <= ids, ids
+    candidate = next(node for node in snap["nodes"] if node["id"] == "기생")
+    assert candidate["candidate"] is True, candidate
 
     layers = {edge["layer"] for edge in snap["edges"]}
     assert "연상" in layers, layers
@@ -70,7 +76,7 @@ def main():
     assert "순서" in layers, layers
     assert "생성" in layers, layers
 
-    assert snap["stats"]["total_nodes"] == 4, snap["stats"]
+    assert snap["stats"]["total_nodes"] == 5, snap["stats"]
     assert snap["grammar_patterns"][0]["pattern"] == "주어 → 서술어", snap["grammar_patterns"]
 
     result = {
@@ -89,6 +95,7 @@ def main():
                 "후보상위": [
                     {"표제어": "경쟁", "표면형": "경쟁과", "선택확률": 0.62},
                     {"표제어": "협력", "표면형": "협력이", "선택확률": 0.21},
+                    {"표제어": "기생", "표면형": "기생이", "선택확률": 0.11},
                 ],
             }
         ],
@@ -108,10 +115,11 @@ def main():
     assert names[0] == "장기기억 지도", names
     assert "입력 개념" in names, names
     assert "문맥 활성화" in names, names
-    assert any(stage.get("kind") == "생성" for stage in stages), stages
+    generation_stage = next(stage for stage in stages if stage.get("kind") == "생성")
+    assert "기생" in generation_stage.get("candidate_ids", []), generation_stage
     assert stages[-1]["kind"] == "완성", stages[-1]
 
-    print("WordMap v0.11.0 layered visual debugger self-test: OK")
+    print("WordMap v0.11.1 focused visual debugger self-test: OK")
 
 
 if __name__ == "__main__":
