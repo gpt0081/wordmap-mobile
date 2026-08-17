@@ -76,7 +76,24 @@ def main():
         core.default_corpus_restore(vault)
         assert (core.wordmap_dirs(vault)["corpus"] / "11_cross_topic.md").exists()
 
-        print("WordMap v0.17.1 bundled default Corpus self-test: OK")
+    # This mirrors the actual UI action: a fresh vault has no Corpus files and
+    # calls rebuild_wordmap once. The wrapper must provision the bundled corpus
+    # before the normal WordMap pipeline starts.
+    with tempfile.TemporaryDirectory() as td:
+        fresh = Path(td) / "FreshVault"
+        (fresh / ".obsidian").mkdir(parents=True)
+        core.wordmap_dirs(fresh)
+        result = core.rebuild_wordmap(fresh)
+        graph = core.load_graph(fresh)
+        assert result.get("default_corpus_bundle") == "Corpus-v1-patched-2026-08-17", result
+        assert int(result.get("corpus_active_documents", result.get("documents", 0))) >= 11, result
+        assert len(graph.get("nodes", {})) > 0
+        assert int((graph.get("대화세션지도", {}) or {}).get("세션수", 0)) == 100
+        assert len(core.corpus_list(fresh)["documents"]) == 11
+        assert len(eval_manifest.load(core, fresh, "dev")["items"]) == 60
+        assert len(eval_manifest.load(core, fresh, "test")["items"]) == 110
+
+    print("WordMap v0.17.1 bundled default Corpus self-test: OK")
 
 
 if __name__ == "__main__":
