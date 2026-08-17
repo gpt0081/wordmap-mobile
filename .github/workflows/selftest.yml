@@ -27,7 +27,8 @@ jobs:
           python selftest_v014.py
           python selftest_v015.py
           python selftest_v016.py
+          python selftest_v017.py
           python selftest_visualizer.py
       - name: Runtime wiring
         run: |
-          python -c "import launch; print('WordMap v0.16 runtime wiring: OK')"
+          python -c "import launch; assert 'wuWorkspace' in launch.wordmap_mobile.HTML; print('WordMap v0.17 runtime wiring: OK')"
