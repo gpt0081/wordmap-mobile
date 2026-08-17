@@ -8,6 +8,8 @@ import corpus_manager
 import corpus_roles
 import corpus_v1
 import corpus_v1_quality
+import default_corpus
+import eval_manifest
 import corpus_integrity
 import relations
 import relation_guard
@@ -30,25 +32,27 @@ import node_health
 import dialogue_corpus
 import credit_learning
 import experiment_harness
+import eval_manifest_patch
 
 # Order matters:
 # 1) basic graph cleanup
 # 2) analysis-only document scaffolding cleanup
 # 3) surface -> lemma/POS resolution
 # 4) corpus manager + TRAIN/DEV/TEST hard role guard
-# 5) Corpus v1 quality patch + installer + integrity/leak checker
-# 6) guarded semantic relations + sparse associations
-# 7) ordered word transitions + grammar-preserving generation stream
-# 8) Korean syntax/grammar tags
-# 9) temporal/owner event patch before Situation/Event Graph wiring
-# 10) Situation/Event Graph
-# 11) dynamic activation + persistent ContextMap gate
-# 12) WordMap GPT-2-style autoregression + event guidance
-# 13) persistent runtime dialogue-session context
-# 14) visual trace + lexicon notes + node-health diagnostics
-# 15) session-aware dialogue corpus map on full rebuild
-# 16) Credit Backprop usage/context/origin learning
-# 17) B0/B1/B2/B3 experiment harness
+# 5) Corpus v1 compatibility + bundled default corpus auto-sync
+# 6) integrity/leak checker with bundled manifest adapter
+# 7) guarded semantic relations + sparse associations
+# 8) ordered word transitions + grammar-preserving generation stream
+# 9) Korean syntax/grammar tags
+# 10) temporal/owner event patch before Situation/Event Graph wiring
+# 11) Situation/Event Graph
+# 12) dynamic activation + persistent ContextMap gate
+# 13) WordMap GPT-2-style autoregression + event guidance
+# 14) persistent runtime dialogue-session context
+# 15) visual trace + lexicon notes + node-health diagnostics
+# 16) blank-line/explicit session-aware dialogue corpus map on full rebuild
+# 17) Credit Backprop usage/context/origin learning
+# 18) B0/B1/B2/B3 experiment harness
 cleaning.apply(core)
 corpus_filter.apply(core)
 language.apply(core)
@@ -56,6 +60,8 @@ corpus_manager.apply(core)
 corpus_roles.apply(core)
 corpus_v1_quality.apply(corpus_v1)
 corpus_v1.apply(core)
+default_corpus.apply(core)
+eval_manifest_patch.apply(experiment_harness, corpus_integrity, eval_manifest)
 corpus_integrity.apply(core)
 relation_guard.apply(relations)
 relations.apply(core)
