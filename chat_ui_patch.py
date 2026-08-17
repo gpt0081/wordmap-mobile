@@ -35,6 +35,7 @@ async function wuDeleteHistory0172(){
 }
 window.wuDeleteChatHistory=wuDeleteHistory0172;
 function install(){
+  let sub=document.querySelector('.wu-brand-sub');if(sub)sub.textContent='Utility Workspace · v0.17.2';
   let tools=document.getElementById('wuAskTools');
   if(!tools||document.getElementById('wuDeleteHistoryBtn'))return false;
   let b=document.createElement('button');b.type='button';b.id='wuDeleteHistoryBtn';b.className='wu-small-btn';b.textContent='대화내역 삭제';b.onclick=wuDeleteHistory0172;tools.appendChild(b);return true;
