@@ -45,8 +45,8 @@ if python -m py_compile \
   syntax_tags.py syntax_bridge.py event_graph.py temporal_event.py activation.py context_map.py \
   wordmap_gpt2.py event_guidance.py dialogue_session.py dialogue_corpus.py visualizer.py lexicon_notes.py node_health.py \
   credit_learning.py experiment_harness.py \
-  ui_patch.py corpus_web.py visual_ui.py node_health_web.py learning_web.py experiment_web.py benchmark.py \
-  selftest.py selftest_gpt2.py selftest_v010.py selftest_v012.py selftest_v013.py selftest_v014.py selftest_v015.py selftest_v016.py selftest_visualizer.py \
+  ui_patch.py corpus_web.py visual_ui.py node_health_web.py learning_web.py experiment_web.py workspace_ui.py benchmark.py \
+  selftest.py selftest_gpt2.py selftest_v010.py selftest_v012.py selftest_v013.py selftest_v014.py selftest_v015.py selftest_v016.py selftest_v017.py selftest_visualizer.py \
   launch.py wordmap_mobile.py \
   && python selftest.py \
   && python selftest_gpt2.py \
@@ -56,15 +56,17 @@ if python -m py_compile \
   && python selftest_v014.py \
   && python selftest_v015.py \
   && python selftest_v016.py \
+  && python selftest_v017.py \
   && python selftest_visualizer.py \
-  && python -c "import launch; print('[WordMap] v0.16 runtime wiring: OK')"; then
+  && python -c "import launch; print('[WordMap] v0.17 runtime wiring: OK')"; then
   NEW_VERSION="$(cat VERSION 2>/dev/null || echo unknown)"
   echo "[WordMap] 업데이트 완료: $OLD_VERSION -> $NEW_VERSION"
-  echo "[WordMap] v0.16 Corpus v1 Experiment Harness가 추가되었습니다."
-  echo "[WordMap] TRAIN 1,500 / DEV 60 / TEST 110 역할 분리와 평가파일 학습 차단이 적용됩니다."
-  echo "[WordMap] Dialogue Session과 세션학습지도, 시간/소유자 사건문맥, 무결성·누출 검사, 자동 Benchmark가 추가되었습니다."
-  echo "[WordMap] Credit Backprop B0/B1/B2/B3 비교와 Target/Non-target/Regression/Transfer 측정을 지원합니다."
-  echo "[WordMap] 코드 업데이트만으로 기존 Corpus를 삭제하지 않습니다. 웹의 'Corpus v1 설치 / 교체'를 눌러 백업 후 교체하세요."
+  echo "[WordMap] v0.17 Utility Workspace UI가 적용되었습니다."
+  echo "[WordMap] 대화/지도/말뭉치/학습/실험/관리 6개 탭으로 화면이 재구성됩니다."
+  echo "[WordMap] 모바일에서는 하단 탭바, 데스크톱에서는 상단 탭바를 사용합니다."
+  echo "[WordMap] 질문 화면은 대표 응답을 먼저 보여주고 상세 분석은 접어서 표시합니다."
+  echo "[WordMap] 최근 질문, 새 대화, 상태 요약, 단축키(Ctrl+Enter, /, Alt+1~6)가 추가되었습니다."
+  echo "[WordMap] 기존 Corpus/학습/실험 데이터는 변경하지 않습니다."
   echo "[WordMap] 서버가 실행 중이었다면 Ctrl+C 후 bash start.sh 로 다시 실행하세요."
 else
   echo "[WordMap] 새 버전 검사 실패. 이전 버전으로 되돌립니다."
