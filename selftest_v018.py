@@ -8,6 +8,7 @@ import launch  # noqa: F401 - validates full patch order
 import activation
 import associative_cascade
 import core
+import credit_learning
 import priming
 
 
@@ -120,6 +121,12 @@ def main():
         # Starting a new conversation clears both dialogue context and primes.
         core.dialogue_start(vault, "fresh-session")
         assert core.priming_status(vault)["active_count"] == 0
+
+    # Credit Backprop keeps cognition origins separately so good/bad feedback
+    # can learn whether priming or cascade paths were useful.
+    assert credit_learning._origin_key("점화") == "점화"
+    assert credit_learning._origin_key("연상 폭포") == "연상 폭포"
+    assert credit_learning._origin_key("연상 이웃") == "연상 이웃"
 
     assert core.priming_version == "0.18.0"
     assert core.associative_cascade_version == "0.18.0"
