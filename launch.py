@@ -103,6 +103,7 @@ import learning_web
 import experiment_web
 import workspace_ui
 import chat_ui_patch
+import cognition_ui_patch
 
 ui_patch.apply(wordmap_mobile)
 corpus_web.apply(wordmap_mobile, core)
@@ -110,9 +111,10 @@ visual_ui.apply(wordmap_mobile)
 node_health_web.apply(wordmap_mobile, core)
 learning_web.apply(wordmap_mobile, core)
 experiment_web.apply(wordmap_mobile, core)
-# Final UI passes: workspace first, then chat-specific convenience overrides.
+# Final UI passes: workspace, chat convenience, then cognition diagnostics.
 workspace_ui.apply(wordmap_mobile)
 chat_ui_patch.apply(wordmap_mobile)
+cognition_ui_patch.apply(wordmap_mobile)
 
 if __name__ == "__main__":
     wordmap_mobile.main()
