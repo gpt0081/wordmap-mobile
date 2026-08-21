@@ -25,12 +25,13 @@ function ensurePanel(){
   p=document.createElement('div');p.id='wuCognitionPanel';
   hero.parentNode.insertBefore(p,hero.nextSibling);return p;
 }
+function clearCog(){let p=document.getElementById('wuCognitionPanel');if(p){p.classList.remove('visible');p.textContent=''}}
 function renderCog(d){
   let p=ensurePanel();if(!p)return;
   let primes=((d||{})['점화상태']||{})['사용전']||[];
   let streams=(d||{})['연상폭포']||[];
   let inhibited=(d||{})['연상억제']||[];
-  if(!primes.length&&!streams.length&&!inhibited.length){p.classList.remove('visible');p.textContent='';return}
+  if(!primes.length&&!streams.length&&!inhibited.length){clearCog();return}
   p.textContent='';
   let title=document.createElement('div');title.className='wu-cog-title';title.textContent='점화 · 연상 사고상태';p.appendChild(title);
   if(primes.length){
@@ -50,17 +51,23 @@ function renderCog(d){
   }
   p.classList.add('visible');
 }
+function wrapClear(name,marker){
+  let old=window[name];if(typeof old!=='function'||old[marker])return false;
+  let wrapped=async function(){let out=await old.apply(this,arguments);clearCog();return out};wrapped[marker]=true;window[name]=wrapped;return true;
+}
 function install(){
   let sub=document.querySelector('.wu-brand-sub');if(sub)sub.textContent='Utility Workspace · v0.18.0';
   ensurePanel();
+  let ok=false;
   let old=window.wuHandleAsk;
   if(typeof old==='function'&&!old._cog018){
-    let wrapped=function(d){let out=old.apply(this,arguments);try{renderCog(d)}catch(e){}return out};wrapped._cog018=true;window.wuHandleAsk=wrapped;
-    return true;
+    let wrapped=function(d){let out=old.apply(this,arguments);try{renderCog(d)}catch(e){}return out};wrapped._cog018=true;window.wuHandleAsk=wrapped;ok=true;
   }
-  return false;
+  wrapClear('wuNewDialogue','_cogClear018');
+  wrapClear('wuDeleteChatHistory','_cogClear018');
+  return ok;
 }
-function boot(){if(install())return;let n=0,t=setInterval(()=>{n++;if(install()||n>50)clearInterval(t)},100)}
+function boot(){install();let n=0,t=setInterval(()=>{n++;install();if((window.wuHandleAsk||{})._cog018&&n>8)clearInterval(t);if(n>50)clearInterval(t)},100)}
 if(document.readyState==='loading')document.addEventListener('DOMContentLoaded',()=>setTimeout(boot,0));else setTimeout(boot,0);
 })();
 </script>
