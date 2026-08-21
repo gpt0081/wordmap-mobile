@@ -34,6 +34,7 @@ import lexicon_notes
 import node_health
 import dialogue_corpus
 import credit_learning
+import cognition_learning_bridge
 import experiment_harness
 import eval_manifest_patch
 
@@ -57,7 +58,7 @@ import eval_manifest_patch
 # 17) visual trace including priming/cascade stages
 # 18) lexicon notes + node-health diagnostics
 # 19) blank-line/explicit session-aware dialogue corpus map on full rebuild
-# 20) Credit Backprop usage/context/origin learning
+# 20) cognition-origin bridge + Credit Backprop usage/context/origin learning
 # 21) B0/B1/B2/B3 experiment harness
 cleaning.apply(core)
 corpus_filter.apply(core)
@@ -91,6 +92,7 @@ cognition_visual_patch.apply(visualizer)
 lexicon_notes.apply(core)
 node_health.apply(core)
 dialogue_corpus.apply(core)
+cognition_learning_bridge.apply(credit_learning)
 credit_learning.apply(core, wordmap_gpt2)
 experiment_harness.apply(core)
 
