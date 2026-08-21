@@ -45,7 +45,7 @@ if python -m py_compile \
   syntax_tags.py syntax_bridge.py event_graph.py temporal_event.py activation.py context_map.py \
   wordmap_gpt2.py event_guidance.py dialogue_session.py priming.py associative_cascade.py dialogue_corpus.py \
   visualizer.py cognition_visual_patch.py lexicon_notes.py node_health.py credit_learning.py experiment_harness.py \
-  ui_patch.py corpus_web.py visual_ui.py node_health_web.py learning_web.py experiment_web.py workspace_ui.py chat_ui_patch.py benchmark.py \
+  ui_patch.py corpus_web.py visual_ui.py node_health_web.py learning_web.py experiment_web.py workspace_ui.py chat_ui_patch.py cognition_ui_patch.py benchmark.py \
   selftest.py selftest_gpt2.py selftest_v010.py selftest_v012.py selftest_v013.py selftest_v014.py selftest_v015.py selftest_v016.py selftest_v017.py selftest_v0171.py selftest_v0172.py selftest_v018.py selftest_visualizer.py \
   launch.py wordmap_mobile.py \
   && python selftest.py \
@@ -61,7 +61,7 @@ if python -m py_compile \
   && python selftest_v0172.py \
   && python selftest_v018.py \
   && python selftest_visualizer.py \
-  && python -c "import launch; assert 'wuWorkspace' in launch.wordmap_mobile.HTML; assert 'wuDeleteHistoryBtn' in launch.wordmap_mobile.HTML; assert launch.core.priming_version == '0.18.0'; assert launch.core.associative_cascade_version == '0.18.0'; print('[WordMap] v0.18 runtime wiring: OK')"; then
+  && python -c "import launch; assert 'wuWorkspace' in launch.wordmap_mobile.HTML; assert 'wuDeleteHistoryBtn' in launch.wordmap_mobile.HTML; assert 'wuCognitionPanel' in launch.wordmap_mobile.HTML; assert launch.core.priming_version == '0.18.0'; assert launch.core.associative_cascade_version == '0.18.0'; print('[WordMap] v0.18 runtime wiring: OK')"; then
   NEW_VERSION="$(cat VERSION 2>/dev/null || echo unknown)"
   echo "[WordMap] 업데이트 완료: $OLD_VERSION -> $NEW_VERSION"
   echo "[WordMap] v0.18 Priming + Associative Cascade가 적용되었습니다."
@@ -69,7 +69,7 @@ if python -m py_compile \
   echo "[WordMap] 현재 입력과 점화에서 최대 3파동의 연상 폭포가 퍼지며 사고경로를 기록합니다."
   echo "[WordMap] 연결이 지나치게 많은 허브 노드는 자동 감점되고 ContextMap과 충돌하는 연상은 억제됩니다."
   echo "[WordMap] 점화/연상은 후보 선택에 영향을 주지만 원본 Corpus와 지식 그래프 사실은 수정하지 않습니다."
-  echo "[WordMap] 시각화 단계에서 점화 메모리와 연상 폭포를 확인할 수 있습니다."
+  echo "[WordMap] 대화 화면과 시각화 단계에서 점화 메모리·연상 경로·억제를 확인할 수 있습니다."
   echo "[WordMap] 기존 기본 Corpus, 대화 UI, Credit Backprop, Benchmark 데이터는 유지합니다."
   echo "[WordMap] 서버가 실행 중이었다면 Ctrl+C 후 bash start.sh 로 다시 실행하세요."
 else
