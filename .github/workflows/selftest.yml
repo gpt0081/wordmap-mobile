@@ -30,7 +30,8 @@ jobs:
           python selftest_v017.py
           python selftest_v0171.py
           python selftest_v0172.py
+          python selftest_v018.py
           python selftest_visualizer.py
       - name: Runtime wiring
         run: |
-          python -c "import launch; assert 'wuWorkspace' in launch.wordmap_mobile.HTML; assert hasattr(launch.core,'default_corpus_sync'); assert 'wuDeleteHistoryBtn' in launch.wordmap_mobile.HTML; print('WordMap v0.17.2 runtime wiring: OK')"
+          python -c "import launch; assert 'wuWorkspace' in launch.wordmap_mobile.HTML; assert hasattr(launch.core,'default_corpus_sync'); assert 'wuDeleteHistoryBtn' in launch.wordmap_mobile.HTML; assert launch.core.priming_version == '0.18.0'; assert launch.core.associative_cascade_version == '0.18.0'; print('WordMap v0.18 runtime wiring: OK')"
