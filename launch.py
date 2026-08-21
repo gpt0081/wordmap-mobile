@@ -26,7 +26,10 @@ import context_map
 import wordmap_gpt2
 import event_guidance
 import dialogue_session
+import priming
+import associative_cascade
 import visualizer
+import cognition_visual_patch
 import lexicon_notes
 import node_health
 import dialogue_corpus
@@ -48,11 +51,14 @@ import eval_manifest_patch
 # 11) Situation/Event Graph
 # 12) dynamic activation + persistent ContextMap gate
 # 13) WordMap GPT-2-style autoregression + event guidance
-# 14) persistent runtime dialogue-session context
-# 15) visual trace + lexicon notes + node-health diagnostics
-# 16) blank-line/explicit session-aware dialogue corpus map on full rebuild
-# 17) Credit Backprop usage/context/origin learning
-# 18) B0/B1/B2/B3 experiment harness
+# 14) dialogue-session context
+# 15) persistent priming memory
+# 16) associative cascade + context inhibition
+# 17) visual trace including priming/cascade stages
+# 18) lexicon notes + node-health diagnostics
+# 19) blank-line/explicit session-aware dialogue corpus map on full rebuild
+# 20) Credit Backprop usage/context/origin learning
+# 21) B0/B1/B2/B3 experiment harness
 cleaning.apply(core)
 corpus_filter.apply(core)
 language.apply(core)
@@ -78,7 +84,10 @@ context_map.apply(core, activation)
 wordmap_gpt2.apply(core)
 event_guidance.apply(core)
 dialogue_session.apply(core)
+priming.apply(core)
+associative_cascade.apply(core, activation, wordmap_gpt2, priming)
 visualizer.apply(core)
+cognition_visual_patch.apply(visualizer)
 lexicon_notes.apply(core)
 node_health.apply(core)
 dialogue_corpus.apply(core)
