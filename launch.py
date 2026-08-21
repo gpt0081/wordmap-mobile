@@ -28,6 +28,7 @@ import event_guidance
 import dialogue_session
 import priming
 import associative_cascade
+import cognition_cache_guard
 import visualizer
 import cognition_visual_patch
 import lexicon_notes
@@ -54,7 +55,7 @@ import eval_manifest_patch
 # 13) WordMap GPT-2-style autoregression + event guidance
 # 14) dialogue-session context
 # 15) persistent priming memory
-# 16) associative cascade + context inhibition
+# 16) associative cascade + context inhibition + per-question cache guard
 # 17) visual trace including priming/cascade stages
 # 18) lexicon notes + node-health diagnostics
 # 19) blank-line/explicit session-aware dialogue corpus map on full rebuild
@@ -87,6 +88,7 @@ event_guidance.apply(core)
 dialogue_session.apply(core)
 priming.apply(core)
 associative_cascade.apply(core, activation, wordmap_gpt2, priming)
+cognition_cache_guard.apply(core, associative_cascade)
 visualizer.apply(core)
 cognition_visual_patch.apply(visualizer)
 lexicon_notes.apply(core)
